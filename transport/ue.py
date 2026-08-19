@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 
 
-class ClassicalFW(object):
+class LinkBased(object):
     def __init__(
         self,
         G: nx.DiGraph,
