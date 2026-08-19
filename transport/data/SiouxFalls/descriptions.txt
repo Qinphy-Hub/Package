@@ -1,0 +1,24 @@
+简介：
+
+SiouxFalls 网络数据集是交通工程与运筹学中最经典、使用最广泛的基准测试交通网络。
+最初由 LeBlanc (1975) 基于美国南达科他州苏福尔斯市路网抽象而来。
+主要用于验证交通分配（Traffic Assignment）、用户均衡（UE）、网络设计等算法。
+
+它具有24个节点、76条边（双向）。
+每条边具有属性：
+- FFT: (Free Flow Time) 自由流通行时间。
+- C: (Capacity) 道路容量。
+- d: (length) 路段长度。
+具有528条OD数据（OD对及其对应的需求大小）。
+
+用法：
+
+@from: 网址 https://github.com/bstabler/TransportationNetworks/tree/master/SiouxFalls
+@parameters: multi_dis [None or Number]
+    None - 路段长度设置为两个坐标点的欧氏距离。
+    Number - (默认=1) 原数据长度的倍数
+@functions:
+    get_network(): 获取networkx格式的图。
+    get_demand(): 获取OD需求，其格式为{(O, D): size}。
+    show_original_graph(file_dir): 展示此交通网络的图像, 可以选择存储图像于<file_dir>.
+    show_highlight_nodes(nodes, file_name): 高亮部分节点，展示图像。

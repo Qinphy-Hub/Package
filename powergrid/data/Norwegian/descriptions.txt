@@ -1,0 +1,120 @@
+Introduction:
+This is a reference dataset for a representative Norwegian radial medium-voltage (MV) distribution system operating at 22 kV.
+Developed by the Norwegian research center CINELDI, it is referred to as the CINELDI MV Reference System.
+The data was provided by a distribution system operator (DSO) based on a real Norwegian distribution network.
+The data has been anonymized and processed to obtain a simplified yet realistic network model comprising 124 nodes, including information on topology, electrical parameters, and existing load points.
+The dataset also includes a load dataset containing one-year hourly time-series load demand data, along with potential long-term load development scenarios.
+The reference system described in this paper can be extended to represent other types of distribution networks (e.g., networks with meshed or looped topologies).
+The dataset can be used to evaluate new methods and principles for distribution system operation and planning, including the assessment of flexible resources, active distribution network measures, grid reinforcement planning, grid reinvestment planning, power supply reliability analysis, and self-healing capabilities.
+
+Details:
+
+1. Norwegian radial medium-voltage distribution system (22 kV): 124 nodes and 123 feeders.
+2. The main feeder is located at node 1, and the three standby feeders are located at nodes 36, 62, and 88.
+3. There are 54 load nodes in total. The time-series data consists of historical load data for the entire year of 2018, with a time granularity of one hour.
+4. There are no transformers in the entire network. The base power is 10 MVA, with a default lagging power factor of 0.95.
+5. The shunt conductance is zero by default. The default type for all buses (except the main feeder) is PQ (load bus).
+
+Open parameters:
+
+1. net(pandapower): power grid (pandapower format)。
+2. load_nodes(dict): Load node locations in the dataset. The attribute "exist" represents a list of existing load nodes, while "plan" represents a list of planned loads.
+3. load_peak_data(pandas): Peak load of the load nodes (used as the base value for the normalized raw load data).
+4. load_data(pandas): Load data of the load nodes (2018), with a time granularity of one hour.
+5. load_plan_data(pandas): Historical load data of planned loads (2018), with a time granularity of one hour.
+6. topology(networkx): the topology of power grid (not include load).
+
+Functions:
+
+1. example_power_flow(): A power flow calculation example provided with the dataset itself.
+    输出1：example_pf_bus_sol.csv, the result of bus
+    输出2：example_pf_branch_sol.csv, the result of branch
+2. export_network(): export power grid (not include load)，file name is "Norwegian.json"(use pandapower import)。
+3. export_topology(): export power grid (not include load)，file name is "Norwegian.gml"(use networkx import)。
+4. show_topology(file_dir=None): show the picture of power grid。
+5. show_load_curve(n, r, l): Display the load profile at node n, where [r, l] indicates the data viewing range.
+6. pf_exist_load(r, l, regen): Calculate the power flow for the existing loads. [r, l] indicates the time interval for the calculation, and "regen" indicates whether to recalculate (instead of using historical records).
+    Output: pf_result.json, the result of power flow (dict format)
+    - bus: {
+        "vm_pu": { bus_index: [] },
+        "va_degree": { ... },
+        "p_mw": { ... },
+        "q_mvar": { ... }
+    },
+    - branch: {
+        "p_from_mw": { line_index: [] },
+        "q_from_mvar": { ... },
+        "p_to_mw": { ... },
+        "q_to_mvar": { ... },
+        "pl_mw": { ... },
+        "ql_mvar": { ... },
+        "i_from_ka": { ... },
+        "i_to_ka": { ... },
+        "i_ka": { ... },
+        "vm_from_pu": { ... },
+        "va_from_degree": { ... },
+        "vm_to_pu": { ... },
+        "va_to_degree": { ... },
+        "loading_percent": { ... }
+    }
+
+Introduction(Chinese)：
+
+这是一个在22kV下运行的代表性挪威径向中压(MV)配电系统的参考数据集。
+该数据集由挪威研究中心CINELDI开发，简称为CINELDI MV参考系统。
+一家配电网公司提供了挪威真实配电系统的数据。
+这些数据经过了匿名化和处理，以获得一个具有124个节点的简化但仍然真实的网络模型，包括拓扑结构、电气参数和现有负载点的信息。
+该数据集还包含一个负载数据集，其中包含一年的负载需求时间序列，具有小时分辨率和可能长期负载发展情景。
+本文描述的参考系统可扩展为表示其它类型的配电网（例如，具有环形拓扑结构）。
+数据集可用于评估配电系统运行和规划的新方法和原则，包括评估灵活性资源、主动配电网措施、电网加固规划、电网再投资规划、供电可靠性分析、自愈等。
+
+细节：
+
+1. Norwegian径向中压配电系统(22kV): 124个节点和123条配线。
+2. 主馈线位于节点1，三个备用馈线位于节点36、62和88。
+3. 一共54个负载节点，时序数据有2018全年的历史负载数据，时间粒度1小时。
+4. 全网无变压器，基础功率10MVA，默认滞后功率因素0.95。
+5. 分流电导、分流电导默认0，所有母线（除了主馈线）默认类型是PQ（负荷节点）。
+
+开放参数：
+
+1. net(pandapower): 电网（不包含负载）。
+2. load_nodes(dict): 数据集中的负载节点位置。属性"exist"表示已存在的负载节点列表(list)，"plan"表示计划并入的负载列表。
+3. load_peak_data(pandas): 负载节点的峰值负荷（以此数据为基数，负载原始数据进行了归一化）。
+4. load_data(pandas): 负载节点的负载数据（2018年），时间粒度为小时。
+5. load_plan_data(pandas): 计划并入的负载历史数据（2018年），时间粒度为小时。
+6. topology(networkx): 电网拓扑（不包含负载）。
+
+功能：
+
+1. example_power_flow(): 数据本身提供的一个潮流计算示例。
+    输出1：example_pf_bus_sol.csv 母线计算结果
+    输出2：example_pf_branch_sol.csv 支路计算结果
+2. export_network(): 导出电网（不包含负载），导出文件为"Norwegian.json"（pandapower可导入）。
+3. export_topology(): 导出电网（不包含负载），导出文件为"Norwegian.gml"（networkx可导入）。
+4. show_topology(file_dir=None): 展示电网拓扑图像。
+5. show_load_curve(n, r, l): 展示节点n处的负载曲线，[r,l]表示查看数据范围。
+6. pf_exist_load(r, l, regen): 计算已有负载的潮流。[r, l]表示计算的时间区间，regen表示是否重新计算（而不使用历史记录）。
+    输出: pf_result.json 潮流计算结果，字典格式。
+    - bus: {
+        "vm_pu": { bus_index: [] },
+        "va_degree": { ... },
+        "p_mw": { ... },
+        "q_mvar": { ... }
+    },
+    - branch: {
+        "p_from_mw": { line_index: [] },
+        "q_from_mvar": { ... },
+        "p_to_mw": { ... },
+        "q_to_mvar": { ... },
+        "pl_mw": { ... },
+        "ql_mvar": { ... },
+        "i_from_ka": { ... },
+        "i_to_ka": { ... },
+        "i_ka": { ... },
+        "vm_from_pu": { ... },
+        "va_from_degree": { ... },
+        "vm_to_pu": { ... },
+        "va_to_degree": { ... },
+        "loading_percent": { ... }
+    }
