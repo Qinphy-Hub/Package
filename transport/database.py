@@ -21,8 +21,8 @@ current_dir = os.path.dirname(__file__)
     show_highlight_nodes(nodes, file_name): highlight some nodes, opt: save picture file to <file_dir>.
 """
 class SiouxFalls:
-    def __init__(self, multi_dis:int=None):
-        self.__graph = self.__get_networkx(multi_dis)
+    def __init__(self):
+        self.__graph = self.__get_networkx()
         self.__demands = self.__get_demands()
 
     def descriptions(self):
@@ -32,19 +32,14 @@ class SiouxFalls:
         return
 
     # get the networkx format topology data
-    def __get_networkx(self, multi_dis=None):
+    def __get_networkx(self):
         pd_link = pd.read_csv(os.path.join(current_dir, "./data/SiouxFalls/Link.csv"))
         pd_node = pd.read_csv(os.path.join(current_dir, "./data/SiouxFalls/Node.csv"))
         G = nx.DiGraph()
         for _, row in pd_node.iterrows():
             G.add_node(int(row['id']), pos=(float(row['pos_x']), float(row['pos_y'])))
         for _, row in pd_link.iterrows():
-            p = G.nodes[int(row['O'])]['pos']
-            q = G.nodes[int(row['D'])]['pos']
-            distance = round(math.dist(p, q), 2)
-            if multi_dis is not None:
-                distance = float(row['FFT']) * multi_dis
-            G.add_edge(int(row['O']), int(row['D']), FFT=float(row['FFT']), C=float(row['Capacity']), d=distance)
+            G.add_edge(int(row['O']), int(row['D']), FFT=float(row['FFT']), C=float(row['Capacity']), d=float(row['FFT']))
         return G
 
     # get OD demand and its size, {(o, d): size, ...}

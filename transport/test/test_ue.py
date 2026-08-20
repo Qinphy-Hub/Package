@@ -7,7 +7,7 @@ from transport.database import SiouxFalls
 from transport.ue import LinkBased
 import math
 
-data = SiouxFalls(multi_dis=1)
+data = SiouxFalls()
 G = data.get_network()
 ods = data.get_demands()
 
