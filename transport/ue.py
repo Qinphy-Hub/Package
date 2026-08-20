@@ -33,7 +33,7 @@ class LinkBased(object):
         
         :param DER_LPF  callable[[float, float, float], float]  the partial derivative function of LPF[FFT, Capacity, flow] -> float
         
-        :param type     str['UE', 'SO', 'SUE']                  the categry of ue
+        :param type     str['UE', 'SO']                         the category of ue
         
         :param alpha    float                                   the parameter of default LPF(BRP)
         
@@ -74,8 +74,8 @@ class LinkBased(object):
 
     def __check_input_parameters(self, LPF, INT_LPF, DER_LPF):
         # type
-        if self.type != 'UE' and self.type != 'SO' and self.type != 'SUE':
-            raise ValueError("Only support type: UE, SO, SUE!")
+        if self.type != 'UE' and self.type != 'SO':
+            raise ValueError("Only support type: UE, SO!")
         # function
         if (LPF is None and INT_LPF is not None) or (LPF is not None and LPF is None):
             raise ValueError("It is not allowed for exactly one of LPF and INT_LPF to be None!")
@@ -243,3 +243,4 @@ class LinkBased(object):
         elif self.type == 'SO':
             x0 = np.array(list(self.link_flow.values()))
             return self.search_step_length(x0)
+            
