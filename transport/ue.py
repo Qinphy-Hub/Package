@@ -127,13 +127,6 @@ class LinkBased(object):
         for e in self.G.edges():
             self.link_flow[e] = 0
             self.G.edges[e]['weight'] =  self.G.edges[e]['d']
-        paths = self.__all_pairs_shortest_paths()
-        for r in self.ods.keys():
-            path = paths[r[0]][r[1]]
-            for i in range(len(path) - 1):
-                self.link_flow[(path[i], path[i + 1])] += self.ods[r]
-        for n1, n2, data in self.G.edges(data=True):
-            data["weight"] = self.d_func(data["FFT"], data["C"], self.link_flow[(n1, n2)])
 
     def __init_iter_flow(self):
         for e in self.G.edges():
@@ -375,13 +368,6 @@ class PathBased(object):
         for e in self.G.edges():
             self.link_flow[e] = 0
             self.G.edges[e]['weight'] = self.G.edges[e]['d']
-        paths = self.__all_pairs_shortest_paths()
-        for r in self.ods.keys():
-            path = paths[r[0]][r[1]]
-            for i in range(len(path) - 1):
-                self.link_flow[(path[i], path[i + 1])] += self.ods[r]
-        for n1, n2, data in self.G.edges(data=True):
-            data["weight"] = self.d_func(data["FFT"], data["C"], self.link_flow[(n1, n2)])
 
     def __init_iter_flow(self):
         for e in self.G.edges():
