@@ -273,6 +273,8 @@ class PathBased(object):
         :param alpha    float                                   the parameter of default LPF(BRP)
         
         :param beta     float                                   the parameter of default LPF(BRP)
+
+        :param theta    float                                   the parameter of SUE
         """
         # Input parameters
         self.G = copy.deepcopy(G)
@@ -437,3 +439,30 @@ class PathBased(object):
             return self.ue_opt(eps=eps, max_iter=max_iter, norm=norm)
         elif self.type == 'SO':
             return self.so_opt(eps=eps, max_iter=max_iter, norm=norm)
+
+    def __get_k_path_cost(self, paths):
+        costs = []
+        for path in paths:
+            costs.append(self.__get_weight_of_one_path(path))
+        return costs
+
+    def __logit_assignment(self):
+        self.__init_iter_flow()
+        for o, d in self.ods.keys():
+            costs = self.__get_k_path_cost(self.Paths[(o, d)])
+            exp_utils = np.exp(-self.theta * np.array(costs))
+            probs = exp_utils / exp_utils.sum()
+            for path, prob in zip(self.Paths[(o, d)], probs):
+                for i in range(len(path) - 1):
+                    self.iter_flow[(path[i], path[i + 1])] += (self.ods[(o, d)] * prob)
+        return
+        
+
+
+    def sue_opt(self, eps=5e-5, max_iter=3000, norm=2):
+        self.__init_link_flow()
+        x0 = np.array(list(self.link_flow.values()))
+        for i in range(max_iter):
+            self.__logit_assignment()
+            direction = np.array(list(self.iter_flow.values())) - x0
+            
