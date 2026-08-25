@@ -186,6 +186,10 @@ class LinkBased(object):
 
     def ue_opt(self, eps=5e-5, max_iter=3000, norm=2):
         self.__init_link_flow()
+        # initial link flow by shortest path to avoid x0=0
+        self.__set_link_flow_by_shortest_path()
+        self.update(1)
+        # end
         x0 = np.array(list(self.link_flow.values()))
         for i in range(max_iter):
             self.__set_link_flow_by_shortest_path()
@@ -208,6 +212,10 @@ class LinkBased(object):
 
     def so_opt(self, eps=5e-5, max_iter=3000, norm=2):
         self.__init_link_flow()
+        # initial link flow by shortest path to avoid x0=0
+        self.__set_link_flow_by_shortest_path()
+        self.update(1)
+        # end
         x0 = np.array(list(self.link_flow.values()))
         for i in range(max_iter):
             self.__set_link_flow_by_shortest_path()
@@ -398,6 +406,10 @@ class PathBased(object):
 
     def ue_opt(self, eps=5e-5, max_iter=3000, norm=2):
         self.__init_link_flow()
+        # initial link flow by shortest path to avoid x0=0
+        self.__set_link_flow_by_shortest_path()
+        self.update(1)
+        # end
         x0 = np.array(list(self.link_flow.values()))
         for i in range(max_iter):
             self.__set_link_flow_by_shortest_path()
@@ -420,6 +432,10 @@ class PathBased(object):
 
     def so_opt(self, eps=5e-5, max_iter=3000, norm=2):
         self.__init_link_flow()
+        # initial link flow by shortest path to avoid x0=0
+        self.__set_link_flow_by_shortest_path()
+        self.update(1)
+        # end
         x0 = np.array(list(self.link_flow.values()))
         for i in range(max_iter):
             self.__set_link_flow_by_shortest_path()
