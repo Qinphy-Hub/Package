@@ -11,9 +11,6 @@ current_dir = os.path.dirname(__file__)
 
 """ SiouxFalls Traffic Network Data
 @from: website https://github.com/bstabler/TransportationNetworks/tree/master/SiouxFalls
-@parameters: multi_dis [None or Number]
-    None - The line segment length is set to the Euclidean distance between the two coordinate points.
-    Number - Multiple of the original data length.
 @functions:
     get_network(): get the traffic network.
     get_demand(): get od demand, format: {(O, D): size}.
@@ -22,6 +19,8 @@ current_dir = os.path.dirname(__file__)
 """
 class SiouxFalls:
     def __init__(self):
+        self.alpha = 0.15
+        self.beta = 4
         self.__graph = self.__get_networkx()
         self.__demands = self.__get_demands()
 
@@ -93,4 +92,45 @@ class SiouxFalls:
             plt.show()
         else:
             plt.savefig(file_name)
+
+
+
+"""Eastern-Massachusetts Traffic network
+@from website https://github.com/bstabler/TransportationNetworks/tree/master/Eastern-Massachusetts
+"""
+class EasternMassachusetts(object):
+    def __init__(self):
+        self.alpha = 0.15
+        self.beta = 4
+        self.__graph = self.__get_networkx()
+        self.__demands = self.__get_demands()
+
+    def description(self):
+        with open(os.path.join(current_dir, 'data/Eastern-Massachusetts/descriptions.txt'), 'r', encoding='utf-8') as f:
+            content = f.read()
+            print(content)
+        return
+
+    def __get_networkx(self):
+        data = pd.read_csv(os.path.join(current_dir, 'data/Eastern-Massachusetts/net.csv')).set_index('index')
+        G = nx.DiGraph()
+        for i in range(1, 74, 1):
+            G.add_node(i)
+        for _, row in data.iterrows():
+            G.add_edge(row['init_node'], row['term_node'], d=row['length'], C=row['capacity'], FFT=row['free_flow_time'])
+        return G
+
+    def __get_demands(self):
+        data = pd.read_csv(os.path.join(current_dir, 'data/Eastern-Massachusetts/ods.csv')).set_index('index')
+        ods = {}
+        for _, row in data.iterrows():
+            ods[(row['o'], row['d'])] = row['demand']
+        return ods
+
+    # get networkx format data
+    def get_network(self) -> nx.DiGraph:
+        return self.__graph
     
+    # get od demand: {(o, d): size, ...}
+    def get_demands(self) -> dict[tuple, float]:
+        return self.__demands
