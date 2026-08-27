@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from transport.database import SiouxFalls
-from transport.ue import LinkBased
+from transport.ue import PathBased, LinkBased
 import math
 
 data = SiouxFalls()
@@ -15,15 +15,15 @@ ods = data.get_demands()
 print("TEST ONE: BPR(DEFAULT) ==================")
 
 # basic function test (UE)
-ue_model = LinkBased(G, ods)
-ue_z = ue_model.ue_opt()
+ue_model = PathBased(G, ods, None)
+ue_z = ue_model.opt()
 ue_t = ue_model.get_system_time_cost()
 print("The value of UE objective function is:", ue_z)
 print("the time cost of the system is:", ue_t)
 
 # SO basic function test
-so_model = LinkBased(G, ods, type='SO')
-so_z = so_model.so_opt()
+so_model = PathBased(G, ods, None, ue_type='SO')
+so_z = so_model.opt()
 so_t = so_model.get_system_time_cost()
 print("The value of SO objective function is:", so_z)
 print("the time cost of the system is:", so_t)
@@ -51,14 +51,14 @@ def DER_conical(FFT, C, flow, alpha=0.25, beta=1):
     b = math.sqrt((alpha ** 2) * ((1 - u) ** 2) + (beta ** 2))
     return FFT / C * (alpha - a / b)
 
-cc_model = LinkBased(G, ods, LPF=conical, INT_LPF=INT_conical)
-cc_z = cc_model.ue_opt()
+cc_model = PathBased(G, ods, None, LPF=conical, INT_LPF=INT_conical)
+cc_z = cc_model.opt()
 cc_t = cc_model.get_system_time_cost()
 print("The value of UE objective function is:", cc_z)
 print("the time cost of the system is:", cc_t)
 
-co_model = LinkBased(G, ods, type='SO', LPF=conical, INT_LPF=INT_conical, DER_LPF=DER_conical)
-co_z = co_model.so_opt()
+co_model = PathBased(G, ods, None, ue_type='SO', LPF=conical, INT_LPF=INT_conical, DER_LPF=DER_conical)
+co_z = co_model.opt()
 co_t = co_model.get_system_time_cost()
 print("The value of SO objective function is:", co_z)
 print("the time cost of the system is:", co_t)
@@ -66,5 +66,6 @@ print("the time cost of the system is:", co_t)
 # PoA
 print("The PoA of this system is:", cc_t / co_t)
 
-# TEST THREE
-# print("TEST THREE: SUE ==================")
+# # TEST THREE
+# # print("TEST THREE: SUE ==================")
+
