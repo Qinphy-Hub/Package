@@ -64,7 +64,7 @@ class LinkBased(object):
             self.__INT_LPF = copy.deepcopy(INT_LPF)
         if DER_LPF is not None:
             self.__DER_LPF = copy.deepcopy(DER_LPF)
-        if ue_type == 'SO':
+        if ue_type == 'SO': # SUE same with UE
             self.__func = self.__INT_SO
             self.__der_func = self.__SO
         # Intermediate parameter
@@ -270,7 +270,7 @@ class PathBased(object):
         ue_type: str='UE',
         alpha: float=0.15,
         beta: float=4,
-        theta: float=1
+        theta: float=1.0
     ) -> None:
         """ Frank-Wolfe algorithm based on the finding shortest path method
 
@@ -298,7 +298,7 @@ class PathBased(object):
         self.__G = copy.deepcopy(G)
         self.__ods = ods
         self.given_paths = True
-        self.Paths = Paths
+        self.Paths = copy.deepcopy(Paths)
         if Paths is None:
             self.given_paths = False
             self.__init_Paths()
@@ -395,18 +395,12 @@ class PathBased(object):
             self.Paths[od] = []
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Initial parameters ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    def __get_one_path_weight(self, path):
-        weight = 0
-        for i in range(len(path) - 1):
-            weight += (self.__G.edges[(path[i], path[i + 1])]['weight'])
-        return weight
-
     def __get_all_path_weight(self):
         c = {}
         for od in self.Paths.keys():
             c[od] = []
             for path in self.Paths[od]:
-                c[od].append(self.__get_one_path_weight(path))
+                c[od].append(nx.path_weight(self.__G, path, weight='weight'))
         return c
 
     def __assignment_by_given_paths(self, cost):
@@ -417,8 +411,9 @@ class PathBased(object):
             path_index = cost[od].index(shortest_path_length)
             self.iter_path_flow[od][path_index] = self.__ods[od]
             path = self.Paths[od][path_index]
+            self.__path_cost[od] = shortest_path_length
             for i in range(len(path) - 1):
-                self.iter_link_flow[(path[i], path[i + 1])] = self.__ods[od]
+                self.iter_link_flow[(path[i], path[i + 1])] += self.__ods[od]
 
     # find all shortest paths between all OD pairs
     def __all_pairs_shortest_paths(self):
@@ -449,12 +444,30 @@ class PathBased(object):
                 path_length += self.__G.edges[(paths[o][d][i], paths[o][d][i + 1])]['weight']
             self.__path_cost[(o, d)] = path_length
 
-    def __shortest_path_assignment(self):
-        if self.given_paths is True:
-            cost = self.__get_all_path_weight()
-            self.__assignment_by_given_paths(cost)
+    # SUE
+    def __logit_assignment(self):
+        self.__init_iter_link_flow()
+        self.__init_iter_path_flow()
+        all_cost = self.__get_all_path_weight()
+        for od in self.__ods.keys():
+            min_cost = min(all_cost[od])
+            exp_utils = np.exp(-self.theta * (np.array(all_cost[od]) - min_cost))
+            probs = exp_utils / exp_utils.sum()
+            k = 0
+            for path, prob in zip(self.Paths[od], probs):
+                self.iter_path_flow[od][k] = prob * self.__ods[od]
+                for i in range(len(path) - 1):
+                    self.iter_link_flow[(path[i], path[i + 1])] += (prob * self.__ods[od])
+
+    def __assignment(self):
+        if self.__type == 'SUE':
+            self.__logit_assignment()
         else:
-            self.__assignment_by_dijkstra()
+            if self.given_paths is True:
+                cost = self.__get_all_path_weight()
+                self.__assignment_by_given_paths(cost)
+            else:
+                self.__assignment_by_dijkstra()
 
     # ============================ Update parameters ============================
     def __update_link_weight(self):
@@ -478,6 +491,18 @@ class PathBased(object):
             s += self.__func(data["FFT"], data["C"], self.link_flow[(u, v)])
         return s
 
+    def __sue_objective_function(self):
+        A = 0
+        for u, v, data in self.__G.edges(data=True):
+            A += self.__func(data["FFT"], data["C"], self.link_flow[(u, v)])
+        B = 0
+        for od in self.__ods.keys():
+            for demand in self.path_flow[od]:
+                if demand == 0:
+                    continue
+                B += (demand * math.log(demand))
+        return A + 1.0 / self.theta * B
+
     def compute_absolute_gap(self):
         A = 0
         B = 0
@@ -496,11 +521,21 @@ class PathBased(object):
             B += (self.__ods[od] * self.__path_cost[od])
         return (A - B) / B
 
+    def compuet_sue_gap(self):
+        A = 0
+        B = 0
+        for e in self.__G.edges():
+            A += ((self.iter_link_flow[e] - self.link_flow[e]) ** 2)
+            B += (self.link_flow[e] ** 2)
+        return A / B
+
     def compute_gap(self):
         if self.__type == 'UE':
             return self.compute_relative_gap()
         elif self.__type == 'SO':
             return self.compute_absolute_gap()
+        else:   # SUE
+            return self.compuet_sue_gap()
 
     def __derivative_function(self, step):
         s = 0
@@ -533,12 +568,17 @@ class PathBased(object):
         self.__init_path_flow()
         self.__update_link_weight()
         for i in range(max_iter):
-            self.__shortest_path_assignment()
-            step = self.__line_search()
+            self.__assignment()
+            if self.__type == "SUE":    # MSA
+                step = 1.0 / (i + 2)
+            else:
+                step = self.__line_search()
             self.__update_by_step(step)
             self.__update_link_weight()
             if self.compute_gap() < eps and i != 0:
                 break
+        if self.__type == "SUE":
+            return self.__sue_objective_function()
         return self.__objective_function()
 
     def get_system_time_cost(self):
@@ -546,17 +586,3 @@ class PathBased(object):
         for n, v, data in self.__G.edges(data=True):
             time += (self.link_flow[(n, v)] * self.__LPF(data['FFT'], data['C'], self.link_flow[(n, v)]))
         return time
-
-    # SUE
-    def __logit_assignment(self):
-        self.__init_iter_link_flow()
-        self.__init_iter_path_flow()
-        all_cost = self.__get_all_path_weight()
-        for od in self.__ods.keys():
-            exp_utils = np.exp(-self.theta * np.array(all_cost[od]))
-            probs = exp_utils / exp_utils.sum()
-            k = 0
-            for path, prob in zip(self.Paths[od], probs):
-                self.iter_path_flow[od][k] = prob * self.__ods[od]
-                for i in range(len(path) - 1):
-                    self.iter_link_flow[(path[i], path[i + 1])] += self.__ods[od]
