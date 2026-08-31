@@ -29,6 +29,10 @@ pip install numba
     - SiouxFalls
 
 2. ue 用户均衡模型
+    - LinkBased: UE and SO
+    - PathBased: UE, SO and SUE
+
+备注：存在优化项，线搜索二分法迭代出口设置。
 
 
 3. location 选址模型
