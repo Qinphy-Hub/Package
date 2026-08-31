@@ -22,48 +22,48 @@ def __add_virtual_nodes__(__G, R: list) -> None:
         __G.add_edge(O, r[0], d=0)
         __G.add_edge(r[1], D, d=0)
 
-# tool: set mapping between edge and its distance, its path of original __network
-def __path_to_edge__(edges, mapping, e, d, path):
+# tool: set __mapping between edge and its distance, its path of original __network
+def __path_to_edge__(edges, __mapping, e, d, path):
     edges[e] = d
-    mapping[e] = path
+    __mapping[e] = path
 
 """ get all path which length is less than vehicle range __veh_range
 @parameter: __G, type: networkx(DiGraph), mean: original traffic __network
 @parameter: R, type: 2-list[(o, d)],    mean: OD pairs
 @parameter: __veh_range, type: float,             mean: vehicle range
-@return: edges, mapping
+@return: edges, __mapping
 """
 def __get_edges_public__(__G, __veh_range: float) -> tuple:
     public_edges = {}
-    mapping = {}
+    __mapping = {}
     for n, (d, path) in nx.all_pairs_dijkstra(__G, cutoff=__veh_range, weight='d'):
         for v in path.keys():
             if n == v:
                 continue
-            __path_to_edge__(public_edges, mapping, (n, v), d[v], path[v])
-    return public_edges, mapping
+            __path_to_edge__(public_edges, __mapping, (n, v), d[v], path[v])
+    return public_edges, __mapping
 
 """ get all path of virtual node which length is less than vehicle range __veh_range
 @parameter: __G, type: networkx(DiGraph), mean: original traffic __network
 @parameter: R, type: 2-list[(o, d)],    mean: OD pairs
 @parameter: __veh_range, type: float,             mean: vehicle range
-@return: edges, mapping
+@return: edges, __mapping
 """
 def __get_edges_demand__(__G, R: list, __veh_range: float) -> tuple:
     demand_edges = {}
-    mapping = {}
+    __mapping = {}
     paths = dict(nx.all_pairs_dijkstra(__G, cutoff=__veh_range, weight='d'))
     for r in R:
         O = "O_" + str((r[0], r[1]))
         D = "D_" + str((r[0], r[1]))
         for v in paths[r[0]][0].keys():
             if v == r[1]:
-                __path_to_edge__(demand_edges, mapping, (O, D), paths[r[0]][0][r[1]], paths[r[0]][1][r[1]])
-            __path_to_edge__(demand_edges, mapping, (O, v), paths[r[0]][0][v], paths[r[0]][1][v])
+                __path_to_edge__(demand_edges, __mapping, (O, D), paths[r[0]][0][r[1]], paths[r[0]][1][r[1]])
+            __path_to_edge__(demand_edges, __mapping, (O, v), paths[r[0]][0][v], paths[r[0]][1][v])
         for n in paths.keys():
             if r[1] in paths[n][0].keys():
-                __path_to_edge__(demand_edges, mapping, (n, D), paths[n][0][r[1]], paths[n][1][r[1]])
-    return demand_edges, mapping
+                __path_to_edge__(demand_edges, __mapping, (n, D), paths[n][0][r[1]], paths[n][1][r[1]])
+    return demand_edges, __mapping
 
 
 
@@ -73,7 +73,7 @@ def __get_edges_demand__(__G, R: list, __veh_range: float) -> tuple:
 European Journal of Operational Research, 
 vol. 227, no. 1, pp. 142–151, May 2013, doi: 10.1016/j.ejor.2012.11.033.
 """
-class GivenPath(object):
+class GivenFlow(object):
     def __init__(
         self,
         G: nx.DiGraph,
@@ -84,17 +84,17 @@ class GivenPath(object):
         Paths: dict[tuple, list]=None
     ):
         """ Given Path Model
-        :param ods: OD pairs and its demands
-        :type ods: dict
-
         :param G: traffic network, attribute: 'd'-link length, 'C'-link capacity, 'FFT'-free flow time
         :type G: nx.DiGraph
 
-        :param veh_range: the range of vehicles
-        :type veh_range: float
+        :param ods: OD pairs and its demands
+        :type ods: dict
 
         :param cost: the cost of station n
         :type cost: dict
+
+        :param veh_range: the range of vehicles
+        :type veh_range: float
 
         :param Paths: the paths, default=None means shortest path
         :type dict
@@ -256,7 +256,7 @@ class GivenPath(object):
 Transportation Science, 
 vol. 47, no. 4, pp. 617–628, Nov. 2013, doi: 10.1287/trsc.1120.0430.
 """
-class SinglePath(object):
+class SingleFlow(object):
     def __init__(
         self,
         G: nx.DiGraph,
@@ -265,32 +265,31 @@ class SinglePath(object):
         veh_range: float
     ):
         """ Single Path Model
-        :param ods: OD pairs and demands
-        :type ods: dict[tuple, float]
-        
         :param G: traffic network, attribute: 'd'-link length, 'C'-link capacity, 'FFT'-free flow time
         :type G: nx.DiGraph
 
-        :param veh_range: the range of electric vehicles
-        :type veh_range: float
-
+        :param ods: OD pairs and demands
+        :type ods: dict[tuple, float]
+        
         :param cost: the cost of charging station n
         :type cost: dict
+
+        :param veh_range: the range of electric vehicles
+        :type veh_range: float
         """
         self.__network = copy.deepcopy(G)
         self.__veh_range = veh_range
         self.__ods = copy.deepcopy(ods)
         self.__cost = copy.deepcopy(cost)
         # preprocess
-        self.mapping = {}                   # mapping: edge of extended __network to path of original __network
-        self.inverse = {}                   # mapping: edge of original __network to edge list of extended __network
-        self.__var_x = []                   # variables of extended __network's edges
-        self.__G = nx.DiGraph()               # extended __network
-        G.add_nodes_from(self.__network.nodes())
+        self.__mapping = {}     # edge of extended network -> path of original network
+        self.__inverse = {}     # edge of original network -> edge list of extended network
+        self.__var_x = []
+        self.__G = nx.DiGraph() # extend network
+        self.__G.add_nodes_from(self.__network.nodes())
         self.__preprocess()
-        # Non-standard results
+        # Results container
         self.__virtual_flow = {}
-        # Standard results
         self.__stations = []
     
     def __init_results(self):
@@ -298,11 +297,6 @@ class SinglePath(object):
             self.__virtual_flow[r] = []
         self.__stations = []
     
-    """ get variables from virtual edges
-    @parameter: public_edges, type: dict,              mean: these edges belong to every demand r.
-    @parameter: demnad_edges, type: dict,              mean: these edges belong to one demand.
-    @return: variable list
-    """
     def __get_variables(self, public_edges: dict, demand_edges: dict) -> list:
         var_list = []
         for n, v in public_edges.keys():
@@ -321,34 +315,79 @@ class SinglePath(object):
         for n, v in edges.keys():
             self.__G.add_edge(n, v, d=edges[(n, v)])
     
-    # get mapping: edge of original __network to edge list of extended __network
+    # get mapping: edge of original network to edge list of extended network
     def __inverse_mapping(self) -> dict:
         inverse = {}
         # inital
         for e in self.__network.edges():
             inverse[e] = []
         # interation
-        for p in self.mapping.keys():
-            for i in range(len(self.mapping[p]) - 1):
-                inverse[(self.mapping[p][i], self.mapping[p][i+1])].append(p)
+        for p in self.__mapping.keys():
+            for i in range(len(self.__mapping[p]) - 1):
+                inverse[(self.__mapping[p][i], self.__mapping[p][i+1])].append(p)
         return inverse
 
+    # add virtual nodes to extend network
+    def __add_virtual_nodes(self) -> None:
+        for r in self.__ods.keys():
+            O = "O_" + str((r[0], r[1]))
+            D = "D_" + str((r[0], r[1]))
+            self.__G.add_node(O)
+            self.__G.add_node(D)
+            self.__G.add_edge(O, r[0], d=0)
+            self.__G.add_edge(r[1], D, d=0)
+
+    # get virtual links from real nodes
+    def __get_edges_public(self) -> tuple:
+        public_edges = {}
+        mapping = {}
+        for n, (d, path) in nx.all_pairs_dijkstra(self.__network, cutoff=self.__veh_range, weight='d'):
+            for v in path.keys():
+                if n == v:
+                    continue
+                public_edges[(n, v)] = d[v]
+                mapping[(n, v)] = path[v]
+        return public_edges, mapping
+
+    # get virtual links from virtual nodes
+    def __get_edges_demand(self) -> tuple:
+        demand_edges = {}
+        mapping = {}
+        paths = dict(nx.all_pairs_dijkstra(self.__network, cutoff=self.__veh_range, weight='d'))
+        for r in self.__ods.keys():
+            O = "O_" + str((r[0], r[1]))
+            D = "D_" + str((r[0], r[1]))
+            for v in paths[r[0]][0].keys():
+                if v == r[1]:
+                    demand_edges[(O, D)] = paths[r[0]][0][r[1]]
+                    mapping[(O, D)] = paths[r[0]][1][r[1]]
+                demand_edges[(O, v)] = paths[r[0]][0][v]
+                mapping[(O, v)] = paths[r[0]][1][v]
+            for n in paths.keys():
+                if r[1] in paths[n][0].keys():
+                    demand_edges[(n, D)] = paths[n][0][r[1]]
+                    mapping[(n, D)] = paths[n][1][r[1]]
+        return demand_edges, mapping
+
     def __preprocess(self):
-        __add_virtual_nodes__(self.__G, self.__ods.keys())
-        public_edges, public_mapping = __get_edges_public__(self.__network, self.__veh_range)
-        demand_edges, demand_mapping = __get_edges_demand__(self.__network, self.__ods.keys(), self.__veh_range)
+        self.__add_virtual_nodes()
+        public_edges, public_mapping = self.__get_edges_public()
+        demand_edges, demand_mapping = self.__get_edges_demand()
         self.__var_x = self.__get_variables(public_edges, demand_edges)
         self.__add_virtual_edges(demand_edges)
         self.__add_virtual_edges(public_edges)
-        self.mapping.update(demand_mapping)
-        self.mapping.update(public_mapping)
-        self.inverse.update(self.__inverse_mapping__())
+        self.__mapping.update(demand_mapping)
+        self.__mapping.update(public_mapping)
+        self.__inverse.update(self.__inverse_mapping())
 
-    """ optimal the location of cahrging station
-    @parameter: num, type: int, mean: the number of station, default: None.
-    @return: int, mean: the number of stations.
-    """
-    def opt(self, limits=None):
+    def opt(self, num: int=None):
+        """
+        :param num: set the number of station, default is None.
+        :type num: int
+
+        :return: the number of stations
+        :rtype: int
+        """
         self.__init_results()
         m = Model()
         m.setParam('OutputFlag', 0)
@@ -360,8 +399,8 @@ class SinglePath(object):
         for i in self.__network.nodes():
             m.addConstrs((x.sum(i, '*', r1, r2) - x.sum('*', i, r1, r2) == 0 for r1, r2 in self.__ods.keys()), 'edges')
             m.addConstrs((x.sum('*', i, r1, r2) <= y[i] for r1, r2 in self.__ods.keys()), 'station')
-        if limits is not None:
-            m.addConstr(y.sum() == limits, 'limits')
+        if num is not None:
+            m.addConstr(y.sum() == num, 'limits')
         m.update()
         m.optimize()
         if m.status == GRB.Status.OPTIMAL:
@@ -393,7 +432,7 @@ class SinglePath(object):
             while True:
                 for e in self.__virtual_flow[r]:
                     if e[0] == start_n:
-                        routes[r] += self.mapping[e] if e[1] == ended_n else self.mapping[e][:-1]
+                        routes[r] += self.__mapping[e] if e[1] == ended_n else self.__mapping[e][:-1]
                         start_n = e[1]
                 if start_n == ended_n:
                     break
@@ -418,7 +457,7 @@ class SinglePath(object):
 """ Multiple Path Model(Our)
 [3] Wait to publish.
 """
-class MultiPath(object):
+class MultiFlow(object):
     def __init__(
         self,
         G: nx.DiGraph,
@@ -430,26 +469,35 @@ class MultiPath(object):
         alpha: float=0.15,
         beta: float=1,
         eps: float=1e-4,
-        links: dict=None
+        links: dict[tuple, list]=None
     ):
         """
+        :param G: traffic network, attribute: 'd'-link length, 'C'-link capacity, 'FFT'-free flow time
+        :type G: nx.DiGraph
+
         :param ods: OD pairs and its demands
         :type ods: dict[tuple, float]
 
-        :param G: traffic network, attribute: 'd'-link length, 'C'-link capacity, 'FFT'-free flow time
-        :type G: nx.DiGraph
+        :param cost: the cost of station n
+        :type cost: dict
 
         :param veh_range: the range of vehicles
         :type veh_range: float
 
-        :param cost: the cost of station n
-        :type cost: dict
+        :param pot_nodes: the potential nodes of stations
+        :type pot_nodes: list
 
         :param alpha: the parameter of BRP
         :type alpha: float
         
         :param beta: the parameter of BRP(power)
         :type beta: float
+
+        :param eps: the iteration accuracy of Frank-Wolfe algorithm
+        :type eps: float
+
+        :param links: the paths, which is less than veh_range, between every nodes
+        :param dict[tuple, list]
         """
         self.__network = copy.deepcopy(G)
         self.__veh_range = veh_range
@@ -465,8 +513,8 @@ class MultiPath(object):
         self.__links = copy.deepcopy(links)
         # preprocess
         self.all_shortest_paths = dict(nx.all_pairs_dijkstra(self.__network, cutoff=self.__veh_range, weight='d'))
-        self.mapping = {}                   # mapping: edge of extended __network to path of original __network
-        self.inverse = {}                   # mapping: edge of original __network to edge list of extended __network
+        self.__mapping = {}                   # __mapping: edge of extended __network to path of original __network
+        self.__inverse = {}                   # __mapping: edge of original __network to edge list of extended __network
         self.__var_x = []                   # variables of extended __network's edges
         self.__G = nx.MultiDiGraph()          # extended __network
         self.__G.add_nodes_from(self.__network.nodes())
@@ -498,7 +546,7 @@ class MultiPath(object):
         for n, v in public_edges.keys():
             if v not in self.pot_nodes:
                 continue
-            for i in self.mapping[(n, v)].keys():
+            for i in self.__mapping[(n, v)].keys():
                 for r1, r2 in self.__ods.keys():
                     var_list.append((n, v, i, r1, r2))
         for r1, r2 in self.__ods.keys():
@@ -506,7 +554,7 @@ class MultiPath(object):
             D = "D_" + str((r1, r2))
             for n, v in demand_edges.keys():
                 if (n == O and v == D) or (n == O and v in self.pot_nodes) or (v == D):
-                    for i in self.mapping[(n, v)].keys():
+                    for i in self.__mapping[(n, v)].keys():
                         var_list.append((n, v, i, r1, r2))
         return var_list
     
@@ -518,40 +566,40 @@ class MultiPath(object):
         return length
 
     """ get all equivalent edges from the DiGraph.
-    @parameter: mapping, type: dict, mean: edge of extended __network to path of original __network
-    @return: mapping, type dict
+    @parameter: __mapping, type: dict, mean: edge of extended __network to path of original __network
+    @return: __mapping, type dict
     """
-    def __find_equivalent_edges(self, mapping):
+    def __find_equivalent_edges(self, __mapping):
         new_mapping = {}
-        for n, v in mapping.keys():
-            length = nx.shortest_path_length(self.__network, mapping[(n, v)][0], mapping[(n, v)][-1], weight='d')
+        for n, v in __mapping.keys():
+            length = nx.shortest_path_length(self.__network, __mapping[(n, v)][0], __mapping[(n, v)][-1], weight='d')
             new_mapping[(n, v)] = {}
             # equivalent shortest path
-            for p in nx.all_shortest_paths(self.__network, mapping[(n, v)][0], mapping[(n, v)][-1], weight='d'):
+            for p in nx.all_shortest_paths(self.__network, __mapping[(n, v)][0], __mapping[(n, v)][-1], weight='d'):
                 new_mapping[(n, v)][len(new_mapping[(n, v)])] = p
             # randomly identify the 'second' shortest path
-            for p in nx.all_shortest_paths(self.__network, mapping[(n, v)][0], mapping[(n, v)][-1]):
+            for p in nx.all_shortest_paths(self.__network, __mapping[(n, v)][0], __mapping[(n, v)][-1]):
                 if self.__get_path_length__(p) != length and self.__get_path_length__(p) <= self.__veh_range:
                     new_mapping[(n, v)][len(new_mapping[(n,v)])] = p
         return new_mapping
     
-    # get mapping: edge of original __network to edge list of extended __network
+    # get __mapping: edge of original __network to edge list of extended __network
     def __inverse_mapping(self) -> dict:
-        inverse = {}
+        __inverse = {}
         # inital
         for e in self.__network.edges():
-            inverse[e] = []
+            __inverse[e] = []
         # interation
-        for u, v in self.mapping.keys():
-            for i in self.mapping[(u, v)]:
-                for j in range(len(self.mapping[(u, v)][i]) - 1):
-                    inverse[(self.mapping[(u, v)][i][j], self.mapping[(u, v)][i][j+1])].append((u, v, i))
-        return inverse
+        for u, v in self.__mapping.keys():
+            for i in self.__mapping[(u, v)]:
+                for j in range(len(self.__mapping[(u, v)][i]) - 1):
+                    __inverse[(self.__mapping[(u, v)][i][j], self.__mapping[(u, v)][i][j+1])].append((u, v, i))
+        return __inverse
     
     # tool: add virtual edges to MultiDiGraph __G
     def __add_virtual_edges(self, edges):
         for n, v in edges.keys():
-            for i in self.mapping[(n, v)].keys():
+            for i in self.__mapping[(n, v)].keys():
                 self.__G.add_edge(n, v, d=edges[(n, v)])
     
     # find: edges not utilized any path
@@ -565,37 +613,37 @@ class MultiPath(object):
     # reduce: edges not utilized any path - get the 'second' shortest path
     def __get_edges_add(self, edge_list):
         new_mapping  = {}
-        for k in self.mapping.keys():
+        for k in self.__mapping.keys():
             new_mapping[k] = {}
         for e in edge_list.keys():
-            for k in self.mapping.keys():
-                for i in self.mapping[k].keys():
-                    idx1 = np.argwhere(np.array(self.mapping[k][i]) == e[0])
-                    idx2 = np.argwhere(np.array(self.mapping[k][i]) == e[1])
+            for k in self.__mapping.keys():
+                for i in self.__mapping[k].keys():
+                    idx1 = np.argwhere(np.array(self.__mapping[k][i]) == e[0])
+                    idx2 = np.argwhere(np.array(self.__mapping[k][i]) == e[1])
                     idx1 = -1 if len(idx1) == 0 else idx1[0][0]
                     idx2 = -1 if len(idx2) == 0 else idx2[0][0]
                     if idx1 != -1 and idx2 != -1 and idx1 < idx2:
-                        l = self.all_shortest_paths[self.mapping[k][i][0]][0][self.mapping[k][i][-1]] - edge_list[e] + self.__network.edges[e]['d']
+                        l = self.all_shortest_paths[self.__mapping[k][i][0]][0][self.__mapping[k][i][-1]] - edge_list[e] + self.__network.edges[e]['d']
                         if l <= self.__veh_range:
-                            new_mapping[k][len(new_mapping[k].keys())] = self.mapping[k][i][: idx1+1] + self.mapping[k][i][idx2:]
-        for k in self.mapping.keys():
+                            new_mapping[k][len(new_mapping[k].keys())] = self.__mapping[k][i][: idx1+1] + self.__mapping[k][i][idx2:]
+        for k in self.__mapping.keys():
             for cnt in new_mapping[k].keys():
-                self.mapping[k][len(self.mapping[k])] = new_mapping[k][cnt]
+                self.__mapping[k][len(self.__mapping[k])] = new_mapping[k][cnt]
     
     def __get_variables_by_links(self) -> list:
         var_list = []
         for n, v in self.__links.keys():
             if v not in self.pot_nodes:
                 continue
-            for i in self.mapping[(n, v)].keys():
+            for i in self.__mapping[(n, v)].keys():
                 for r1, r2 in self.__ods.keys():
                     var_list.append((n, v, i, r1, r2))
         for r1, r2 in self.__ods.keys():
             O = "O_" + str((r1, r2))
             D = "D_" + str((r1, r2))
-            for n, v in self.mapping.keys():
+            for n, v in self.__mapping.keys():
                 if (n == O and v == D) or (n == O and v in self.pot_nodes) or (v == D):
-                    for i in self.mapping[(n, v)].keys():
+                    for i in self.__mapping[(n, v)].keys():
                         var_list.append((n, v, i, r1, r2))
         return var_list
 
@@ -606,52 +654,52 @@ class MultiPath(object):
             edge_add = self.__find_bad_edges__()
             public_edges, public_mapping = __get_edges_public__(self.__network, self.__veh_range)
             demand_edges, demand_mapping = __get_edges_demand__(self.__network, self.__ods.keys(), self.__veh_range)
-            self.mapping.update(self.__find_equivalent_edges(public_mapping))
-            self.mapping.update(self.__find_equivalent_edges(demand_mapping))
+            self.__mapping.update(self.__find_equivalent_edges(public_mapping))
+            self.__mapping.update(self.__find_equivalent_edges(demand_mapping))
             self.__get_edges_add(edge_add)
             self.__var_x = self.__get_variables(public_edges, demand_edges)
             self.__add_virtual_edges(public_edges)
             self.__add_virtual_edges(demand_edges)
-            self.inverse = self.__inverse_mapping()
+            self.__inverse = self.__inverse_mapping()
         else:
-            # 2. initial mapping
+            # 2. initial __mapping
             for n, v in self.__links.keys():
-                self.mapping[(n, v)] = {}
+                self.__mapping[(n, v)] = {}
                 for r1, r2 in self.__ods.keys():
                     O = 'O_' + str((r1, r2))
                     D = 'D_' + str((r1, r2))
-                    self.mapping[(O, r1)] = {0: [r1]}
-                    self.mapping[(r2, D)] = {0: [r2]}
+                    self.__mapping[(O, r1)] = {0: [r1]}
+                    self.__mapping[(r2, D)] = {0: [r2]}
                     if r1 == n and r2 == v:
-                        self.mapping[(O, D)] = {}
+                        self.__mapping[(O, D)] = {}
                     if r1 == n:
-                        self.mapping[(O, v)] = {}
+                        self.__mapping[(O, v)] = {}
                     if r2 == v:
-                        self.mapping[(n, D)] = {}
-            # 3. mapping
+                        self.__mapping[(n, D)] = {}
+            # 3. __mapping
             for n, v in self.__links.keys():
                 idx = 0
                 for p in self.__links[(n, v)]:
                     l = 0
                     for i in range(len(p) - 1):
                         l += (self.__network.edges[(p[i], p[i+1])]['d'])
-                    self.mapping[(n, v)][idx] = list(p)
+                    self.__mapping[(n, v)][idx] = list(p)
                     self.__G.add_edge(n, v, d=l)
                     for r1, r2 in self.__ods.keys():
                         O = 'O_' + str((r1, r2))
                         D = 'D_' + str((r1, r2))
                         if r1 == n and r2 == v:
-                            self.mapping[(O, D)][idx] = list(p)
+                            self.__mapping[(O, D)][idx] = list(p)
                             self.__G.add_edge(O, D, d=l)
                         if r1 == n:
-                            self.mapping[(O, v)][idx] = list(p)
+                            self.__mapping[(O, v)][idx] = list(p)
                             self.__G.add_edge(O, v, d=l)
                         if r2 == v:
-                            self.mapping[(n, D)][idx] = list(p)
+                            self.__mapping[(n, D)][idx] = list(p)
                             self.__G.add_edge(n, D, d=l)
                     idx += 1
-            # 4. inverse
-            self.inverse = self.__inverse_mapping()
+            # 4. __inverse
+            self.__inverse = self.__inverse_mapping()
             # 5. variables
             self.__var_x = self.__get_variables_by_links()
 
@@ -697,7 +745,7 @@ class MultiPath(object):
         for r in self.__ods.keys():
             graph = nx.DiGraph()
             for u, v, k in self.__virtual_flow[r].keys():
-                path = self.mapping[(u, v)][k]
+                path = self.__mapping[(u, v)][k]
                 for n in path:
                     graph.add_node(n, pos=self.__network.nodes[n]['pos'])
                 graph.add_nodes_from(path)
@@ -760,7 +808,7 @@ class MultiPath(object):
                 lin_m.addConstrs((x.sum('*', i, '*', r1, r2) / self.__ods[(r1, r2)] <= y[i] for r1, r2 in self.__ods.keys()), 'station')
             for e in self.__network.edges():
                 expr = LinExpr()
-                for p1, p2, cnt in self.inverse[e]:
+                for p1, p2, cnt in self.__inverse[e]:
                     expr += x.sum(p1, p2, cnt, '*', '*')
                 lin_m.addConstr((z[e] == expr), 'flow-calc')
             lin_m.addConstr(quicksum(y[i] * self.__cost[i] for i in self.pot_nodes) <= p, 'station-limits')
@@ -922,7 +970,7 @@ class MultiPath(object):
                 lin_m.addConstrs((x.sum('*', i, '*', r1, r2) / self.__ods[(r1, r2)] <= y[i] for r1, r2 in self.__ods.keys()), 'station')
             for e in self.__network.edges():
                 expr = LinExpr()
-                for p1, p2, cnt in self.inverse[e]:
+                for p1, p2, cnt in self.__inverse[e]:
                     expr += x.sum(p1, p2, cnt, '*')
                 lin_m.addConstr((expr - z[e] == 0), 'flow-calc')
             lin_m.addConstr(quicksum(y[i] * self.__cost[i] for i in self.pot_nodes) <= p, 'station-limits')
@@ -1015,7 +1063,7 @@ class MultiPath(object):
                 lin_m.addConstrs((x.sum('*', i, '*', r1, r2) / self.__ods[(r1, r2)] <= y[i] for r1, r2 in self.__ods.keys()), 'station')
             for e in self.__network.edges():
                 expr = LinExpr()
-                for p1, p2, cnt in self.inverse[e]:
+                for p1, p2, cnt in self.__inverse[e]:
                     expr += x.sum(p1, p2, cnt, '*')
                 lin_m.addConstr((z[e] == expr), 'flow-calc')
             lin_m.addConstr(quicksum(y[i] * self.__cost[i] for i in self.pot_nodes) <= p, 'station-limits')

@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from transport.database import SiouxFalls
-from transport.location import GivenPath
+from transport.location import GivenPath, SinglePath
 
 
 data = SiouxFalls()
@@ -40,5 +40,20 @@ def test_given_path_model():
     flows = m.get_link_flows()
     data.show_links_weight(flows)
 
+def test_single_path_model():
+    print("================================ Single Path Model =================================")
+    m = SinglePath(G, ods, cost, R)
+    print("All flows should be covered:")
+    m.opt()
+    print("Routes:")
+    routes = m.get_routes()
+    for od in ods.keys():
+        print(f"{od}: {routes[od]}.")
+    stations = m.get_stations()
+    data.show_highlight_nodes(stations)
+    flows = m.get_link_flows()
+    data.show_links_weight(flows)
+
 
 test_given_path_model()
+test_single_path_model()
