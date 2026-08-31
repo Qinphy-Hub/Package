@@ -64,14 +64,14 @@ class SiouxFalls:
         d = nx.get_edge_attributes(self.__graph, 'd')
         nx.draw(self.__graph, pos=pos, with_labels=True, node_size=200, font_size=10, font_weight='bold', node_color='lightblue')
         nx.draw_networkx_edge_labels(self.__graph, pos=pos, edge_labels=d)
-        if file_dir == None:
+        if file_dir is None:
             plt.show()
         else:
             plt.savefig(file_dir + "/SiouxFalls.png")
     
     """ highlight some nodes
     @parameter: nodes [list] - the nodes which need to highlight.
-    @parameter: file_nam [None] - show picture directly; [str] - output file to <str>.
+    @parameter: file_name [None] - show picture directly; [str] - output file to <str>.
     @return: None
     """
     def show_highlight_nodes(self, nodes: list, file_name: str=None) -> None:
@@ -86,6 +86,26 @@ class SiouxFalls:
         colors = nx.get_node_attributes(self.__graph, 'color').values()
         nx.draw(self.__graph, pos=pos, with_labels=True, node_size=200, font_size=10, font_weight='bold', node_color=colors)
         nx.draw_networkx_edge_labels(self.__graph, pos=pos, edge_labels=d)
+        if file_name is None:
+            plt.show()
+        else:
+            plt.savefig(file_name)
+
+    """ show weight in the graph
+    @parameter: weight [dict] - the weight which need to show up.
+    @parameter: file_name [None] - show picture directly; [str] - output file to <str>.
+    @return: None
+    """
+    def show_links_weight(self, weight: dict[tuple, any], file_name: str=None) -> None:
+        plt.figure(figsize=(4, 5))
+        for n in self.__graph.nodes():
+            self.__graph.nodes[n]['color'] = 'lightblue'
+        for e in self.__graph.edges():
+            self.__graph.edges[e]['weight'] = weight[e]
+        w = nx.get_edge_attributes(self.__graph, 'weight')
+        pos = nx.get_node_attributes(self.__graph, 'pos')
+        nx.draw(self.__graph, pos=pos, with_labels=True, node_size=200, font_size=10, font_weight='bold', node_color='lightblue')
+        nx.draw_networkx_edge_labels(self.__graph, pos=pos, edge_labels=w)
         if file_name is None:
             plt.show()
         else:

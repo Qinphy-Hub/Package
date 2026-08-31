@@ -25,5 +25,7 @@ def test_given_path_model():
         print(f"{od}: {routes[od]}.")
     stations = m.get_stations()
     data.show_highlight_nodes(stations)
+    flows = m.get_link_flows()
+    data.show_links_weight(flows)
 
 test_given_path_model()
