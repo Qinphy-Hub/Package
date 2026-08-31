@@ -216,6 +216,8 @@ class GivenPath(object):
             for r in self.__ods.keys():
                 if y[r].X == 1:
                     self.__routes[r] = self.__Paths[r]
+                else:
+                    self.__routes[r] = [0]
             return m.ObjVal
         return None
     
