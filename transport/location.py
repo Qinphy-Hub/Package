@@ -495,7 +495,6 @@ class MultiFlow(object):
     def __find_equivalent_edges(self, mapping):
         new_mapping = {}
         for n, v in mapping.keys():
-            length = nx.shortest_path_length(self.__network, mapping[(n, v)][0], mapping[(n, v)][-1], weight='d')
             new_mapping[(n, v)] = {}
             # equivalent shortest path
             for p in nx.all_shortest_paths(self.__network, mapping[(n, v)][0], mapping[(n, v)][-1], weight='d'):
