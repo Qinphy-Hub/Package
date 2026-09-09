@@ -68,6 +68,7 @@ class SiouxFalls:
             plt.show()
         else:
             plt.savefig(file_dir + "/SiouxFalls.png")
+        plt.close()
     
     """ highlight some nodes
     @parameter: nodes [list] - the nodes which need to highlight.
@@ -90,6 +91,7 @@ class SiouxFalls:
             plt.show()
         else:
             plt.savefig(file_name)
+        plt.close()
 
     """ show weight in the graph
     @parameter: weight [dict] - the weight which need to show up.
@@ -110,6 +112,7 @@ class SiouxFalls:
             plt.show()
         else:
             plt.savefig(file_name)
+        plt.close()
 
 
 

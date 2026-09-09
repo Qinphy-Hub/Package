@@ -151,6 +151,7 @@ class Norwegian:
             plt.show()
         else:
             plt.savefig(file_dir + "/Norwegian.png")
+        plt.close()
     
     # show load curve in the range of [l, r]
     def show_load_curve(self, n, l=0, r=8760):
@@ -175,6 +176,7 @@ class Norwegian:
         plt.xlabel("hour")
         plt.ylabel("power (kW)")
         plt.show()
+        plt.close()
         return
     
     # initial the bus(node) result container of power flow
