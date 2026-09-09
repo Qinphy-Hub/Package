@@ -21,6 +21,8 @@ class LinkBased(object):
         alpha: float=0.15,
         beta: float=4,
         max_iter: int=30,
+        c1: float=1e-4,
+        c2: float=0.9,
         R: float=None
     ) -> None:
         """ Frank-Wolfe algorithm based on the finding shortest path method
@@ -42,6 +44,10 @@ class LinkBased(object):
         :param beta     float                                   the parameter of default LPF(BRP)
 
         :param max_iter int                                     the number of line search iteration
+
+        :param c1       float                                   the parameter of line search
+
+        :param c2       float                                   the parameter of line search
         
         :param R        float                                   Auxiliary variable for location model
         """
@@ -58,6 +64,8 @@ class LinkBased(object):
         self.__func = self.__INT_LPF
         self.__der_func = self.__LPF
         self.line_search_iter = max_iter
+        self.c1 = c1
+        self.c2 = c2
         if LPF is not None:
             self.__LPF = copy.deepcopy(LPF)
         if INT_LPF is not None:
@@ -176,13 +184,14 @@ class LinkBased(object):
                 path_length += self.__G.edges[(path[i], path[i + 1])]['weight']
             self.__path_cost[r] = path_length
 
-    def __objective_function(self):
+    def __objective_function(self, step=0):
         s = 0
         for u, v, data in self.__G.edges(data=True):
-            s += self.__func(data["FFT"], data["C"], self.link_flow[(u, v)])
+            p_k = self.iter_link_flow[(u, v)] - self.link_flow[(u, v)]
+            s += self.__func(data["FFT"], data["C"], self.link_flow[(u, v)] + step * p_k)
         return s
     
-    def __derivative_function(self, step):
+    def __curvature_function(self, step):
         s = 0
         for u, v, data in self.__G.edges(data=True):
             e = (u, v)
@@ -190,22 +199,25 @@ class LinkBased(object):
             s += (self.__der_func(data["FFT"], data["C"], flow) * (self.iter_link_flow[e] - self.link_flow[e]))
         return s
 
-    def __line_search(self):
+    def __line_search(self, c1=1e-4, c2=0.9):
         step_low = 0.0
         step_high = 1.0
-        low = self.__derivative_function(step_low)
-        high = self.__derivative_function(step_high)
+        low = self.__curvature_function(step_low)
+        high = self.__curvature_function(step_high)
         if low * high > 0:
             return 1.0
         for _ in range(self.line_search_iter):
             step_mid = (step_low + step_high) / 2
-            mid = self.__derivative_function(step_mid)
-            if mid < 0:
-                step_low = step_mid
-            elif mid == 0:
+            # Armijo condition
+            armijo = (self.__objective_function(step_mid) <= self.__objective_function() + c1 * step_mid * self.__curvature_function(0))
+            # Wolfe condition
+            wolfe = (self.__curvature_function(step_mid) >= c2 * self.__curvature_function(0))
+            if armijo and wolfe:
                 break
-            else:
+            elif not armijo:
                 step_high = step_mid
+            else:
+                step_low = step_mid
         return (step_low + step_high) / 2
 
     def __update_link_weight(self):
@@ -239,12 +251,12 @@ class LinkBased(object):
         elif self.__type == 'SO':
             return self.norm_gap()
 
-    def opt(self, eps=3.9e-15, max_iter=20000):
+    def opt(self, eps=5e-5, max_iter=20000):
         self.__init_link_flow()
         self.__update_link_weight()
         for i in range(max_iter):
             self.__set_link_flow_by_shortest_path()
-            step = self.__line_search()
+            step = self.__line_search(self.c1, self.c2)
             self.__update_step(step)
             self.__update_link_weight()
             if self.compute_gap() < eps and i != 0:
@@ -270,7 +282,10 @@ class PathBased(object):
         ue_type: str='UE',
         alpha: float=0.15,
         beta: float=4,
-        theta: float=1.0
+        theta: float=1.0,
+        max_iter: int=30,
+        c1: float=1e-4,
+        c2: float=0.9,
     ) -> None:
         """ Frank-Wolfe algorithm based on the finding shortest path method
 
@@ -293,6 +308,12 @@ class PathBased(object):
         :param beta     float                                   the parameter of default LPF(BRP)
 
         :param theta    float                                   the parameter of SUE
+
+        :param max_iter int                                     the number of line search iteration
+        
+        :param c1       float                                   the parameter of line search
+        
+        :param c2       float                                   the parameter of line search
         """
         # Input parameters
         self.__G = copy.deepcopy(G)
@@ -310,6 +331,9 @@ class PathBased(object):
         self.alpha = alpha
         self.beta = beta
         self.theta = theta
+        self.line_search_iter = max_iter
+        self.c1 = c1
+        self.c2 = c2
         self.__func = self.__INT_LPF
         self.__der_func = self.__LPF
         self.__paths = True if len(set([t[0] for t in list(self.__ods.keys())])) >= len(self.__G.nodes()) else False
@@ -485,10 +509,11 @@ class PathBased(object):
                     self.path_flow[od][i] += (step * (self.iter_path_flow[od][i] - self.path_flow[od][i]))
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Update parameters ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     
-    def __objective_function(self):
+    def __objective_function(self, step=0):
         s = 0
         for u, v, data in self.__G.edges(data=True):
-            s += self.__func(data["FFT"], data["C"], self.link_flow[(u, v)])
+            p_k = self.iter_link_flow[(u, v)] - self.link_flow[(u, v)]
+            s += self.__func(data["FFT"], data["C"], self.link_flow[(u, v)] + step * p_k)
         return s
 
     def __sue_objective_function(self):
@@ -537,7 +562,7 @@ class PathBased(object):
         else:   # SUE
             return self.compuet_sue_gap()
 
-    def __derivative_function(self, step):
+    def __curvature_function(self, step):
         s = 0
         for u, v, data in self.__G.edges(data=True):
             e = (u, v)
@@ -545,25 +570,28 @@ class PathBased(object):
             s += (self.__der_func(data["FFT"], data["C"], flow) * (self.iter_link_flow[e] - self.link_flow[e]))
         return s
 
-    def __line_search(self):
+    def __line_search(self, c1=1e-4, c2=0.9):
         step_low = 0.0
         step_high = 1.0
-        low = self.__derivative_function(step_low)
-        high = self.__derivative_function(step_high)
+        low = self.__curvature_function(step_low)
+        high = self.__curvature_function(step_high)
         if low * high > 0:
             return 1.0
-        for _ in range(30):
+        for _ in range(self.line_search_iter):
             step_mid = (step_low + step_high) / 2
-            mid = self.__derivative_function(step_mid)
-            if mid < 0:
-                step_low = step_mid
-            elif mid == 0:
+            # Armijo condition
+            armijo = (self.__objective_function(step_mid) <= self.__objective_function() + c1 * step_mid * self.__curvature_function(0))
+            # Wolfe condition
+            wolfe = (self.__curvature_function(step_mid) >= c2 * self.__curvature_function(0))
+            if armijo and wolfe:
                 break
-            else:
+            elif not armijo:
                 step_high = step_mid
+            else:
+                step_low = step_mid
         return (step_low + step_high) / 2
 
-    def opt(self, eps=3.9e-15, max_iter=20000):
+    def opt(self, eps=5e-5, max_iter=20000):
         self.__init_link_flow()
         self.__init_path_flow()
         self.__update_link_weight()
@@ -572,7 +600,7 @@ class PathBased(object):
             if self.__type == "SUE":    # MSA
                 step = 1.0 / (i + 2)
             else:
-                step = self.__line_search()
+                step = self.__line_search(self.c1, self.c2)
             self.__update_by_step(step)
             self.__update_link_weight()
             if self.compute_gap() < eps and i != 0:

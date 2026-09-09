@@ -75,14 +75,14 @@ def test3():
     ue_t = ue_model.get_system_time_cost()
     print("The value of UE objective function is", ue_z)
     print("UE: the time cost of the system is", ue_t)
-    # # SO basic function test
-    # so_model = PathBased(G, ods, None, ue_type='SO')
-    # so_z = so_model.opt()
-    # so_t = so_model.get_system_time_cost()
-    # print("The value of SO objective function is", so_z)
-    # print("SO: the time cost of the system is", so_t)
-    # # PoA
-    # print("The PoA of this system is:", ue_t / so_t)
+    # SO basic function test
+    so_model = PathBased(G, ods, None, ue_type='SO')
+    so_z = so_model.opt()
+    so_t = so_model.get_system_time_cost()
+    print("The value of SO objective function is", so_z)
+    print("SO: the time cost of the system is", so_t)
+    # PoA
+    print("The PoA of this system is:", ue_t / so_t)
     return ue_model.Paths
 
 # TEST FOUR
@@ -122,30 +122,30 @@ test5(Paths)
 
 """ Results
 ========================== TEST ONE: Link-based BPR(DEFAULT) of UE and SO ==========================
-The value of UE objective function is 4231359.049374299
-UE: the time cost of the system is 7480197.278500641
-The value of SO objective function is 7194407.8178115785
-SO: the time cost of the system is 7194407.8178115785
-The PoA of this system is: 1.0397238338340395
+The value of UE objective function is 4231687.98451264
+UE: the time cost of the system is 7477233.635279585
+The value of SO objective function is 7194308.904802257
+SO: the time cost of the system is 7194308.904802257
+The PoA of this system is: 1.0393261860480405
 ============================= TEST TWO: Link-based UE and SO (CONICAL) =============================
-The value of UE objective function is 5610983.964860248
-UE: the time cost of the system is 8616513.368459614
-The value of SO objective function is: 7118133.143786397
-the time cost of the system is: 7118133.143786397
-The PoA of this system is: 1.210501854124658
+The value of UE objective function is 6421555.69877257
+UE: the time cost of the system is 8621524.99256948
+The value of SO objective function is: 7116352.585286325
+the time cost of the system is: 7116352.585286325
+The PoA of this system is: 1.2115089702546822
 ====================== TEST THREE: Path-based of UE and SO (BPR, None Paths) =======================
-The value of UE objective function is 4231359.049374299
-UE: the time cost of the system is 7480197.278500641
-The value of SO objective function is 7194407.8178115785
-SO: the time cost of the system is 7194407.8178115785
-The PoA of this system is: 1.0397238338340395
+The value of UE objective function is 4231687.98451264
+UE: the time cost of the system is 7477233.635279585
+The value of SO objective function is 7194308.904802257
+SO: the time cost of the system is 7194308.904802257
+The PoA of this system is: 1.0393261860480405
 ======================== TEST FOUR: Path-based UE and SO (BPR, Given Paths) ========================
-The value of UE objective function is 4231359.049374299
-UE: the time cost of the system is 7480197.278500641
-The value of SO objective function is 7194457.442243401
-SO: the time cost of the system is 7194457.442243401
-The PoA of this system is: 1.039716662243281
+The value of UE objective function is 4231687.98451264
+UE: the time cost of the system is 7477233.635279585
+The value of SO objective function is 7194308.105542806
+SO: the time cost of the system is 7194308.105542806
+The PoA of this system is: 1.0393263015131087
 ========================================== TEST FIVE: SUE ==========================================
-The value of SUE objective function is: 5112495.472745353
-the time cost of the system is: 7418003.328157724
+The value of SUE objective function is: 4867748.396530695
+the time cost of the system is: 7312432.272911054
 """
