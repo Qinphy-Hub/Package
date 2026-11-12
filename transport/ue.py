@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 import networkx as nx
 import numpy as np
-from scipy.optimize import line_search
 
 
 
@@ -23,7 +22,7 @@ class LinkBased(object):
         max_iter: int=30,
         c1: float=1e-4,
         c2: float=0.9,
-        R: float=None
+        veh_r: float=None
     ) -> None:
         """ Frank-Wolfe algorithm based on the finding shortest path method
 
@@ -49,7 +48,7 @@ class LinkBased(object):
 
         :param c2       float                                   the parameter of line search
         
-        :param R        float                                   Auxiliary variable for location model
+        :param veh_r    float                                   Auxiliary variable for location model (vehicle range)
         """
         # Input parameters
         self.__G = copy.deepcopy(G)
@@ -83,7 +82,7 @@ class LinkBased(object):
         # Initial parameter
         self.__paths = True if len(set([t[0] for t in list(self.__ods.keys())])) >= len(self.__G.nodes()) else False
         # Auxiliary variable for location model
-        self.R = R
+        self.veh_r = veh_r
         self.link_set = self.__init_link_set()
 
     def __check_input_parameters(self, LPF, INT_LPF, DER_LPF):
@@ -131,21 +130,21 @@ class LinkBased(object):
 
     # =================================== Auxiliary variable for location model ===================================
     def __init_link_set(self):
-        if self.R is None:
+        if self.veh_r is None:
             return
         link_set = {}
         for n in self.__G.nodes():
             for v in self.__G.nodes():
                 if n == v:
                     continue
-                if nx.shortest_path_length(self.__G, n, v, weight='d') <= self.R:
+                if nx.has_path(self.__G, n, v) and nx.shortest_path_length(self.__G, n, v, weight='d') <= self.veh_r:
                     link_set[(n, v)] = set()
                     for p in nx.all_shortest_paths(self.__G, n, v, weight='d'):
                         link_set[(n, v)].add(tuple(p))
         return link_set
 
     def __update_link_set(self):
-        if self.R is None:
+        if self.veh_r is None:
             return
         for n in self.__G.nodes():
             for v in self.__G.nodes():
@@ -156,7 +155,7 @@ class LinkBased(object):
                     l = 0
                     for i in range(len(p) - 1):
                         l += (self.__G.edges[(p[i], p[i+1])]['d'])
-                    if l <= self.R:
+                    if l <= self.veh_r:
                         self.link_set[(n, v)].add(tuple(p))
     # =================================== Auxiliary variable for location model ===================================
 

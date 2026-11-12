@@ -408,7 +408,7 @@ class MultiFlow(object):
         *,
         pot_nodes: list=None,
         alpha: float=0.15,
-        beta: float=1,
+        beta: float=4,
         links: dict[tuple, list]=None
     ):
         """
@@ -628,7 +628,6 @@ class MultiFlow(object):
             # 5. variables
             self.__var_x = self.__get_variables_by_links()
 
-    # ===================================== PART 1 UE objective =====================================
     def INT_BPR(self, f, FFT, C):
         return FFT * (f + (self.alpha * C / (self.beta + 1)) * ((1.0 * f / C) ** (self.beta + 1)))
     
@@ -662,7 +661,7 @@ class MultiFlow(object):
             i += 1
         return expr
     
-    def opt_ue(self, p: int, z0: list, eps=1e-4, max_iter=3000):
+    def opt_location(self, p: int, z0: list, eps=1e-4, max_iter=3000):
         """ Frank Wolfe Algorithm
         :param p: limit the number of stations
         :type p: int
@@ -728,235 +727,6 @@ class MultiFlow(object):
                 self.__flows[e] = z0[i]
         return self.objective_step_ue(z0)
 
-    # ================================== PART 2 shortest path objective ==================================
-    def objective_shortest_path(self, y):
-        expr = LinExpr()
-        for v in self.__network.nodes():
-            expr += (y[v] * self.__cost[v])
-        return expr
-
-    def shortest_path_constraint(self, x):
-        expr = LinExpr()
-        for t in self.__var_x:
-            expr += (x[t] / self.__ods[(t[-2], t[-1])] * self.__G.edges[(t[0], t[1], t[2])]['d'])
-        return expr
-
-    def __all_shortest_path_length(self):
-        length = 0
-        for o, d in self.__ods.keys():
-            length += nx.shortest_path_length(self.__network, o, d, weight='d')
-        return length
-    
-    # shortest path model
-    def opt_shortest_path(self):
-        self.__init_results()
-        m = Model()
-        m.setParam('OutputFlag', 0)
-        x = m.addVars(self.__var_x, vtype=GRB.CONTINUOUS, name='x')
-        y = m.addVars(self.__pot_nodes, vtype=GRB.BINARY, name='y')
-        m.setObjective(self.objective_shortest_path(y), GRB.MINIMIZE)
-        m.addConstrs((x.sum('O_' + str((r1, r2)), '*', '*', r1, r2) - x.sum('*', 'O_' + str((r1, r2)), '*', r1, r2) == self.__ods[(r1, r2)] for r1, r2 in self.__ods.keys()), 'origin')
-        m.addConstrs((x.sum('D_' + str((r1, r2)), '*', '*', r1, r2) - x.sum('*', 'D_' + str((r1, r2)), '*', r1, r2) == -self.__ods[(r1, r2)] for r1, r2 in self.__ods.keys()), 'destination')
-        for i in self.__network.nodes():
-            m.addConstrs((x.sum(i, '*', '*', r1, r2) - x.sum('*', i, '*', r1, r2) == 0 for r1, r2 in self.__ods.keys()), 'flow-balance')
-        for i in self.__pot_nodes:
-            m.addConstrs((x.sum('*', i, '*', r1, r2) / self.__ods[(r1, r2)] <= y[i] for r1, r2 in self.__ods.keys()), 'station')
-        # shortest path constraint
-        m.addConstr(self.shortest_path_constraint(x) <= self.__all_shortest_path_length())
-        m.update()
-        m.optimize()
-        if m.Status != GRB.Status.OPTIMAL:
-            print("No Solution!")
-            return None
-        # results:
-        for i in self.__pot_nodes:
-            if y[i].X == 1:
-                self.__stations.append(i)
-        for i1, i2, i3, i4, i5 in self.__var_x:
-            if x[i1, i2, i3, i4, i5].X > 1e-4:
-                self.__virtual_flow[(i4, i5)][(i1, i2, i3)] = x[i1, i2, i3, i4, i5].X
-                path = self.__mapping[(i1, i2)][i3]
-                for i in range(len(path) - 1):
-                    self.__flows[(path[i], path[i + 1])] += x[i1, i2, i3, i4, i5].X
-        return None
-
-    # ================================ PART 3 shortest path and UE objective ================================
-    def __sum_shortest_path(self):
-        total = 0.0
-        paths = dict(nx.all_pairs_dijkstra_path_length(self.__network, weight='d'))
-        for r1, r2 in self.__ods.keys():
-            total += paths[r1][r2]
-        return total
-    
-    # shortest path and minimun travel cost
-    def shortest_path_constraint(self, x):
-        expr = LinExpr()
-        for t in self.__var_x:
-            expr += (x[t] * self.__G.edges[(t[0], t[1], t[2])]['d'] / self.__ods[(t[-2], t[-1])])
-        return expr
-    
-    # shortest path and optimize travel cost
-    def opt_sp_and_ue(self, p, z0, eps=1e-4, max_iter=3000):
-        """ Frank Wolfe Algorithm
-        :param p: the number of station, you can get p from opt_shortest_path()
-        :type p: int
-
-        :param z0: the initial point of iteration
-        :type z0: list
-        """
-        self.__init_results()
-        x0 = np.array([0] * len(self.__var_x))
-        y0 = np.array([1] * len(self.__pot_nodes))
-        for j in range(max_iter):
-            lin_m = Model()
-            lin_m.setParam('OutputFlag', 0)
-            x = lin_m.addVars(self.__var_x, vtype=GRB.CONTINUOUS, name='x')
-            y = lin_m.addVars(self.__pot_nodes, vtype=GRB.BINARY, name='y')
-            z = lin_m.addVars(self.__network.edges(), vtype=GRB.CONTINUOUS, name='z')
-            lin_m.setObjective(self.objective_linear_ue(z, z0), GRB.MINIMIZE)
-            lin_m.addConstrs((x.sum('O_' + str((r1, r2)), '*', '*', r1, r2) - x.sum('*', 'O_' + str((r1, r2)), '*', r1, r2) == self.__ods[(r1, r2)] for r1, r2 in self.__ods.keys()), 'origin')
-            lin_m.addConstrs((x.sum('D_' + str((r1, r2)), '*', '*', r1, r2) - x.sum('*', 'D_' + str((r1, r2)), '*', r1, r2) == -self.__ods[(r1, r2)] for r1, r2 in self.__ods.keys()), 'destination')
-            for i in self.__network.nodes():
-                lin_m.addConstrs((x.sum(i, '*', '*', r1, r2) - x.sum('*', i, '*', r1, r2) == 0 for r1, r2 in self.__ods.keys()), 'flow-balance')
-            for i in self.__pot_nodes:
-                lin_m.addConstrs((x.sum('*', i, '*', r1, r2) / self.__ods[(r1, r2)] <= y[i] for r1, r2 in self.__ods.keys()), 'station')
-            for e in self.__network.edges():
-                expr = LinExpr()
-                for p1, p2, cnt in self.__inverse[e]:
-                    expr += x.sum(p1, p2, cnt, '*')
-                lin_m.addConstr((expr - z[e] == 0), 'flow-calc')
-            lin_m.addConstr(quicksum(y[i] * self.__cost[i] for i in self.__pot_nodes) <= p, 'station-limits')
-            lin_m.addConstr(self.shortest_path_constraint(x) == self.__sum_shortest_path())
-            lin_m.update()
-            lin_m.optimize()
-            if lin_m.status != GRB.Status.OPTIMAL:
-                print('Optimal solution not found!')
-                return None
-            zt = np.array(lin_m.getAttr('X', z.values()))
-            # find the KKT point
-            if math.fabs(np.dot(zt-z0, self.gradient_step_ue(z0))) < 1e-4:
-                break
-            xt = np.array(lin_m.getAttr('X', x.values()))
-            yt = np.array(lin_m.getAttr('X', y.values()))
-            # line search: get the length of step
-            step_m = line_search(f=self.objective_step_ue, myfprime=self.gradient_step_ue, xk=z0, pk=zt-z0, amax=1)
-            step = step_m[0] if step_m[0] is not None else 1.0
-            z1 = z0 + step * (zt - z0)
-            err = np.linalg.norm(z1 - z0, ord=2) / np.sum(z0)
-            # update parameters
-            z0 = z1
-            x0 = x0 + step * (xt - x0)
-            y0 = yt
-            if err < eps:
-                break
-        # results:
-        for i in range(len(y0)):
-            if y0[i] == 1:
-                self.__stations.append(self.__pot_nodes[i])
-        for i in range(len(self.__var_x)):
-            if x0[i] > eps:
-                tuple5 = self.__var_x[i]
-                self.__virtual_flow[(tuple5[-2], tuple5[-1])][(tuple5[0], tuple5[1], tuple5[2])] = x0[i]
-        for i in range(len(self.__network.edges())):
-            if z0[i] > eps:
-                e = list(self.__network.edges())[i]
-                self.__flows[e]= z0[i]
-        return self.objective_step_ue(z0)
-
-
-    # ==================================== PART 4 SO objective ====================================
-    def DER2_BPR(self, f, FFT, C):
-        return FFT * (1 + (self.alpha * (self.beta + 1)) * ((f / C) ** self.beta))
-    
-    def objective_linear_so(self, x, x0):
-        expr = LinExpr()
-        i = 0
-        for e in self.__network.edges():
-            expr += (x[e] * self.DER2_BPR(x0[i], self.__network.edges[e]['FFT'], self.__network.edges[e]['C']))
-            i += 1
-        return expr
-    
-    def DER_BPR(self, f, FFT, C):
-        return FFT * (f + self.alpha * ((f ** (self.beta + 1)) / (C ** self.beta)))
-    
-    def objective_step_so(self, x):
-        expr = 0
-        i = 0
-        for _, _, data in self.__network.edges(data=True):
-            expr += (self.DER_BPR(x[i], data["FFT"], data["C"]))
-            i += 1
-        return expr
-    
-    def gradient_step_so(self, x):
-        expr = []
-        i = 0
-        for _, _, data in self.__network.edges(data=True):
-            expr.append(self.DER2_BPR(x[i], data["FFT"], data["C"]))
-            i += 1
-        return expr
-
-    # fix the cost of stations
-    def opt_so(self, p, z0, eps=1e-4, max_iter=3000):
-        self.__init_results()
-        x0 = np.array([0] * len(self.__var_x))
-        y0 = np.array([1] * len(self.__pot_nodes))
-        for j in range(max_iter):
-            lin_m = Model()
-            lin_m.setParam('OutputFlag', 0)
-            y = lin_m.addVars(self.__pot_nodes, vtype=GRB.BINARY, name='y')
-            x = lin_m.addVars(self.__var_x, vtype=GRB.CONTINUOUS, name='x')
-            z = lin_m.addVars(self.__network.edges(), vtype=GRB.CONTINUOUS, name='z')
-            lin_m.setObjective(self.objective_linear_so(z, z0), GRB.MINIMIZE)
-            lin_m.addConstrs((x.sum('O_' + str((r1, r2)), '*', '*', r1, r2) - x.sum('*', 'O_' + str((r1, r2)), '*', r1, r2) == self.__ods[(r1, r2)] for r1, r2 in self.__ods.keys()), 'origin')
-            lin_m.addConstrs((x.sum('D_' + str((r1, r2)), '*', '*', r1, r2) - x.sum('*', 'D_' + str((r1, r2)), '*', r1, r2) == -self.__ods[(r1, r2)] for r1, r2 in self.__ods.keys()), 'destination')
-            for i in self.__network.nodes():
-                lin_m.addConstrs((x.sum(i, '*', '*', r1, r2) - x.sum('*', i, '*', r1, r2) == 0 for r1, r2 in self.__ods.keys()), 'flow-balance')
-            for i in self.__pot_nodes:
-                lin_m.addConstrs((x.sum('*', i, '*', r1, r2) / self.__ods[(r1, r2)] <= y[i] for r1, r2 in self.__ods.keys()), 'station')
-            for e in self.__network.edges():
-                expr = LinExpr()
-                for p1, p2, cnt in self.__inverse[e]:
-                    expr += x.sum(p1, p2, cnt, '*')
-                lin_m.addConstr((z[e] == expr), 'flow-calc')
-            lin_m.addConstr(quicksum(y[i] * self.__cost[i] for i in self.__pot_nodes) <= p, 'station-limits')
-            lin_m.update()
-            lin_m.optimize()
-            if lin_m.status != GRB.Status.OPTIMAL:
-                print('Optimal solution not found!')
-                return None
-            zt = np.array(lin_m.getAttr('X', z.values()))
-            # find the KKT point
-            if math.fabs(np.dot(zt-z0, self.gradient_step_so(z0))) < 1e-4:
-                break
-            xt = np.array(lin_m.getAttr('X', x.values()))
-            yt = np.array(lin_m.getAttr('X', y.values()))
-            # line search: get the length of step
-            step_m = line_search(f=self.objective_step_so, myfprime=self.gradient_step_so, xk=z0, pk=zt-z0, amax=1)
-            step = step_m[0] if step_m[0] is not None else 1.0
-            z1 = z0 + step * (zt - z0)
-            err = np.linalg.norm(z1 - z0, ord=2) / np.sum(z0)
-            # update parameters
-            z0 = z1
-            x0 = x0 + step * (xt - x0)
-            y0 = yt
-            if err < eps:
-                print("limited by eps. Iter =", j + 1)
-                break
-        # results:
-        for i in range(len(y0)):
-            if y0[i] == 1:
-                self.__stations.append(self.__pot_nodes[i])
-        for i in range(len(self.__var_x)):
-            if x0[i] > eps:
-                tuple5 = self.__var_x[i]
-                self.__virtual_flow[(tuple5[-2], tuple5[-1])][(tuple5[0], tuple5[1], tuple5[2])] = x0[i]
-        for i in range(len(self.__network.edges())):
-            if z0[i] > eps:
-                e = list(self.__network.edges())[i]
-                self.__flows[e] = z0[i]
-        return self.objective_step_so(z0)
-
-    # ==================================== PART 5 Results function ====================================
     def get_stations(self):
         return self.__stations
     
