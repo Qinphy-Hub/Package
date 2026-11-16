@@ -1,3 +1,4 @@
+# Attention: This database is only for optimal power flow
 import copy
 import os
 import math
@@ -24,6 +25,7 @@ class Norwegian:
         # the basic infomation of power grid
         self.__base_voltage = 22        # base voltage (kV)
         self.__base_power = 10          # base power (MVA)
+        self.__base_impedance = self.__base_voltage ** 2 / self.__base_power
         self.__power_factor = 0.95      # load power factor (lagging)
         # construct power grid
         self.net = pp.create_empty_network(name="Norwegian22kV", add_stdtypes=False)
@@ -86,12 +88,25 @@ class Norwegian:
     def __get_topology(self):
         pd_bus = pd.read_csv(os.path.join(current_dir, "data/Norwegian/bus.csv"))
         pd_branch = pd.read_csv(os.path.join(current_dir, "data/Norwegian/branch.csv"))
-        G = nx.Graph()
+        G = nx.DiGraph()
         for _, row in pd_bus.iterrows():
-            G.add_node(int(row['index']), pos=(float(row['x']), float(row['y'])), Vmax=float(row["Vmax"]), Vmin=float(row["Vmin"]), color='lightblue')
+            G.add_node(
+                int(row['index']),
+                pos=(float(row['x']), float(row['y'])),
+                Vmax=float(row["Vmax"]),
+                Vmin=float(row["Vmin"]),
+                color='lightblue'
+            )
         for _, row in pd_branch.iterrows():
-            G.add_edge(int(row['from']), int(row['to']), R=float(row["R"]), X=float(row["X"]), B=float(row["B"]),
-                       rate_A=float(row["rate_A"]), length=float(row["length_km"]))
+            G.add_edge(
+                int(row['from']),
+                int(row['to']),
+                R=float(row["R"]),
+                X=float(row["X"]),
+                B=float(row["B"]),
+                rate_A=float(row["rate_A"]),
+                length=float(row["length_km"])
+            )
         # special node
         G.nodes[1]['color'] = 'tab:red'     # Mian feeder
         G.nodes[36]['color'] = 'tab:blue'   # Backup feeder1
@@ -100,6 +115,14 @@ class Norwegian:
         for n in G.nodes():                 # hilight load node
             if n in self.load_nodes["exist"]:
                 G.nodes[n]["color"] = 'tab:green'
+        for n in G.nodes():
+            b1 = 0
+            for i in G.predecessors(n):
+                b1 += G.edges[(i, n)]['B']
+            b2 = 0
+            for i in G.successors(n):
+                b2 += G.edges[(n, i)]['B']
+            G.nodes[n]['b'] = (b1 + b2) / 2.0
         return G
     
     # get load node list
@@ -132,14 +155,24 @@ class Norwegian:
         net = copy.deepcopy(self.net)
         # get load data (example: peak load)
         pd_load = self.load_peak_data
-        for _, row in pd_load.iterrows():
-            pp.create_load(net, bus=int(row["index"]), p_mw=float(row["p_mw"]), q_mvar=float(row["q_mvar"]))
+        for index, row in pd_load.iterrows():
+            pp.create_load(net, bus=int(index), p_mw=float(row["p_mw"]), q_mvar=float(row["q_mvar"]))
         # calculate
         pp.runpp(net)
         # print
         net.res_bus.to_csv("example_pf_bus_sol.csv")
         net.res_line.to_csv("example_pf_branch_sol.csv")
         return
+
+    def get_load_data(self):
+        pd_load = self.load_peak_data
+        load = {}
+        for index, row in pd_load.iterrows():
+            load[int(index)] = (
+                float(row["p_mw"]) / self.__base_power,
+                float(row['q_mvar']) / self.__base_power
+            )
+        return load
     
     # show topology
     def show_topology(self, file_dir=None):
@@ -264,3 +297,58 @@ class Norwegian:
         with open("pf_result.json", 'w', encoding='utf-8') as f:
             json.dump(res, f)
         return
+
+
+
+""" IEEE 33 bus power grid
+The data origin is the paper M. Baran, F. Wu, 
+“Network reconfiguration in distribution systems for loss reduction and load balancing”
+IEEE Transactions on Power Delivery, 1989.
+"""
+class IEEE33:
+    def __init__(self):
+        self.__base_voltage = 12.66     # kV
+        self.__base_power = 10          # MVA
+        self.__base_impedance = self.__base_voltage ** 2 / self.__base_power
+        self.slack = 0
+        self.grid = self.__get_topology()
+        self.load = self.__get_load_data()
+        self.cost = self.__get_cost_data()
+
+    def __get_topology(self):
+        pd_bus = pd.read_csv(os.path.join(current_dir, './data/IEEE33/bus.csv'))
+        pd_branch = pd.read_csv(os.path.join(current_dir, './data/IEEE33/branch.csv'))
+        G = nx.DiGraph()
+        for _, row in pd_bus.iterrows():
+            G.add_node(
+                int(row['name']),
+                Vmax=float(row['max_vm_pu']),
+                Vmin=float(row['min_vm_pu']),
+                g=0,
+                b=0,
+                pos=(float(row['geo_x']), float(row['geo_y']))
+            )
+        for _, row in pd_branch.iterrows():
+            if row['in_service'] is True:
+                G.add_edge(
+                    int(row['from_bus']),
+                    int(row['to_bus']),
+                    R=float(row['r_ohm_per_km']) / self.__base_impedance,
+                    X=float(row['x_ohm_per_km']) / self.__base_impedance
+                )
+        return G
+
+    def __get_load_data(self):
+        load = {}
+        pd_load = pd.read_csv(os.path.join(current_dir, './data/IEEE33/load.csv'))
+        for _, row in pd_load.iterrows():
+            load[int(row['bus'])] = (
+                float(row['p_mw']) / self.__base_power,
+                float(row['q_mvar']) / self.__base_power
+            )
+        return load
+
+    def __get_cost_data(self):
+        cost = {}
+        cost[0] = 20.0
+        return cost
