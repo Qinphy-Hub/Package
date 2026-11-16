@@ -1,15 +1,17 @@
 from powergrid import database, macro
+import pandas as pd
+import math
 
+# data = database.Norwegian()
+# data.run_powerflow(10)
 
 data = database.Norwegian()
-m = macro.PowerFlow(data.topology, 1)
-m.set_gen_and_cost({1: 5.0})
-m.opt_conic_relax(data.get_load_data())
-# m.opt_linear_approx(data.get_load_data())
-# data.example_power_flow()
+m = macro.BranchFlow(data.topology, data.slack)
+load = {}
+for col in data.load_data.columns:
+    p = data.load_data[col][10]
+    q = math.sqrt((p / data.power_factor) ** 2 - p ** 2)
+    load[int(col)] = (p / 10, q / 10)
 
-# data = database.IEEE33()
-# m = powerflow.PowerFlow(data.grid, data.slack)
-# m.set_gen_and_cost(data.cost)
-# m.opt_conic_relax(data.load)
-# # m.opt_linear_approx(data.load)
+m.set_gen_and_cost({1: 5.0})
+m.opt_conic_relax(load)

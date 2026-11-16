@@ -23,17 +23,18 @@ Note: This database only support basic infomation of power grid, topology and lo
 class Norwegian:
     def __init__(self):
         # the basic infomation of power grid
-        self.__base_voltage = 22        # base voltage (kV)
-        self.__base_power = 10          # base power (MVA)
-        self.__base_impedance = self.__base_voltage ** 2 / self.__base_power
-        self.__power_factor = 0.95      # load power factor (lagging)
+        self.base_voltage = 22        # base voltage (kV)
+        self.base_power = 10          # base power (MVA)
+        self.base_impedance = self.base_voltage ** 2 / self.base_power
+        self.slack = 1
+        self.power_factor = 0.95      # load power factor (lagging)
         # construct power grid
         self.net = pp.create_empty_network(name="Norwegian22kV", add_stdtypes=False)
         self.__set_std_type()           # add standard line type
         self.__set_power_grid()         # construct power grid by pandapower
         # get load data
         self.load_peak_data = pd.read_csv(os.path.join(current_dir, "data/Norwegian/peak_loads.csv")).set_index('index')
-        self.load_data = self.__get_load_data()
+        self.load_data = pd.read_csv(os.path.join(current_dir, "data/Norwegian/loads.csv")).set_index('index')
         self.load_plan_data = pd.read_csv(os.path.join(current_dir, "data/Norwegian/loads_plan.csv")).set_index('index')
         self.load_nodes = self.__get_load_nodes()
         # set networkx data
@@ -65,15 +66,17 @@ class Norwegian:
         for _, row in pd_bus.iterrows():
             pp.create_bus(
                 net=self.net, 
-                vn_kv=self.__base_voltage, 
+                vn_kv=self.base_voltage, 
                 index=int(row['index']), 
                 geodata=(float(row['x']), float(row['y'])),
                 max_vm_pu=float(row['Vmax']), 
-                min_vm_pu=float(row['Vmin'])
+                min_vm_pu=float(row['Vmin']),
+                in_service=True
             )
             # Main Feeder
             if int(row["type"]) == 3:
-                pp.create_ext_grid(self.net, bus=int(row["index"]), vm_pu=1.0, va_degree=0.0)
+                s = pp.create_ext_grid(self.net, bus=int(row["index"]), vm_pu=1.0, va_degree=0.0)
+                pp.create_poly_cost(self.net, element=s, et="ext_grid", cp1_eur_per_mw=5.0)
         for _, row in pd_branch.iterrows():
             pp.create_line(
                 net=self.net, 
@@ -81,7 +84,8 @@ class Norwegian:
                 to_bus=int(row['to']), 
                 length_km=float(row['length_km']),
                 std_type=row['type'], 
-                index=int(row['index'])
+                index=int(row['index']),
+                in_service=True
             )
     
     # networkx format
@@ -131,14 +135,6 @@ class Norwegian:
         nodes["exist"] = self.load_data.columns.tolist()
         nodes["plan"] = self.load_plan_data.columns.tolist()
         return nodes
-    
-    # get load data
-    def __get_load_data(self):
-        origin_data = pd.read_csv(os.path.join(current_dir, "data/Norwegian/loads.csv")).set_index('index')
-        peak_data = self.load_peak_data["p_mw"]
-        for col in origin_data.columns:
-            origin_data[col] = origin_data[col] * peak_data.at[int(col)]
-        return origin_data
 
     # export power grid by pandapower format(json)
     def export_network(self):
@@ -149,6 +145,18 @@ class Norwegian:
     def export_topology(self):
         nx.write_gml(self.topology, "Norwegian.gml")
         return
+
+    # show topology
+    def show_topology(self, file_dir=None):
+        plt.figure(figsize=(15, 6))
+        pos = nx.get_node_attributes(self.topology, 'pos')
+        colors = nx.get_node_attributes(self.topology, 'color').values()
+        nx.draw(self.topology, pos=pos, with_labels=True, node_size=500, font_size=10, font_weight='bold', font_color='whitesmoke', node_color=colors)
+        if file_dir == None:
+            plt.show()
+        else:
+            plt.savefig(file_dir + "/Norwegian.png")
+        plt.close()
     
     # example of power flow
     def example_power_flow(self):
@@ -164,139 +172,54 @@ class Norwegian:
         net.res_line.to_csv("example_pf_branch_sol.csv")
         return
 
-    def get_load_data(self):
+    def __get_reactive_power(self, p: float):
+        return math.sqrt((p / self.power_factor) ** 2 - p ** 2)
+
+    def get_peak_load_data(self):
         pd_load = self.load_peak_data
         load = {}
         for index, row in pd_load.iterrows():
             load[int(index)] = (
-                float(row["p_mw"]) / self.__base_power,
-                float(row['q_mvar']) / self.__base_power
+                float(row["p_mw"]) / self.base_power,
+                float(row['q_mvar']) / self.base_power
             )
         return load
-    
-    # show topology
-    def show_topology(self, file_dir=None):
-        plt.figure(figsize=(15, 6))
-        pos = nx.get_node_attributes(self.topology, 'pos')
-        colors = nx.get_node_attributes(self.topology, 'color').values()
-        nx.draw(self.topology, pos=pos, with_labels=True, node_size=500, font_size=10, font_weight='bold', font_color='whitesmoke', node_color=colors)
-        if file_dir == None:
-            plt.show()
-        else:
-            plt.savefig(file_dir + "/Norwegian.png")
-        plt.close()
-    
-    # show load curve in the range of [l, r]
-    def show_load_curve(self, n, l=0, r=8760):
-        # wrong input parameter
-        n = str(n)
-        l = 0 if l > 8760 or l < 0 else l
-        r = 8760 if r > 8760 or r < 0 else r
-        # load data
-        data_df = self.load_data
-        plt.title(f"Exist Load Node {n}")
-        if n in self.load_nodes["plan"]:
-            data_df = self.load_plan_data
-            plt.title(f"Plan Load Node {n}")
-        elif n not in self.load_nodes["exist"]:
-            print("There is no load at this node!")
-            return
-        series = data_df[n].tolist()[l: r]
-        # paint
-        plt.rcParams['font.sans-serif'] = ['SimHei']
-        plt.rcParams['axes.unicode_minus'] = False
-        plt.plot(list(range(l, r, 1)), series)
-        plt.xlabel("hour")
-        plt.ylabel("power (kW)")
-        plt.show()
-        plt.close()
-        return
-    
-    # initial the bus(node) result container of power flow
-    def __init_pf_res_bus(self):
-        res_bus = {
-            "vm_pu": {},
-            "va_degree": {},
-            "p_mw": {},
-            "q_mvar": {}
-        }
-        for i in self.net.bus.index:
-            for k in res_bus.keys():
-                res_bus[k][i] = []
-        return res_bus
 
-    # initial the branch(link) result container of power flow
-    def __init_pf_res_branch(self):
-        res_branch = {
-            "p_from_mw": {},
-            "q_from_mvar": {},
-            "p_to_mw": {},
-            "q_to_mvar": {},
-            "pl_mw": {},
-            "ql_mvar": {},
-            "i_from_ka": {},
-            "i_to_ka": {},
-            "i_ka": {},
-            "vm_from_pu": {},
-            "va_from_degree": {},
-            "vm_to_pu": {},
-            "va_to_degree": {},
-            "loading_percent": {}
-        }
-        for i in self.net.line.index:
-            for k in res_branch.keys():
-                res_branch[k][i] = []
-        return res_branch
+    def get_load_data(self, load_time=0):
+        if load_time >= len(self.load_data.index) or load_time < 0:
+            raise ValueError('illegal load_time!')
+        load = {}
+        for col in self.load_data.columns:
+            load[int(col)] = (
+                self.load_data[col][load_time] / self.base_power,
+                self.__get_reactive_power(self.load_data[col][load_time]) / self.base_power
+            )
+        return load
 
-    # get power flow result in the range of [l, r]
-    def pf_exist_load(self, l=0, r=8760, regen=False):
-        l = 0 if l > 8760 or l < 0 else l
-        r = 8760 if r > 8760 or r < 0 else r
-        net = copy.deepcopy(self.net)
-        res_bus = self.__init_pf_res_bus()
-        res_branch = self.__init_pf_res_branch()
-        res = {}
-        file_path = os.path.join(current_dir, "./data/Norwegian/.storage/pf_result_all.json")
-        if regen is False and os.path.exists(file_path):
-            with open(file_path, 'r') as f:
-                res = json.load(f)
-            for k in res_bus.keys():
-                for i in res_bus[k].keys():
-                    res_bus[k][i] = res['bus'][k][str(i)][l: r]
-            for k in res_branch.keys():
-                for i in res_branch[k].keys():
-                    res_branch[k][i] = res['branch'][k][str(i)][l: r]
-        else:
-            for index, row in self.load_peak_data.iterrows():
-                pp.create_load(
-                    net=net, 
-                    index=int(index), 
-                    bus=int(index), 
-                    p_mw=float(row["p_mw"]), 
-                    q_mvar=float(row["q_mvar"])
+    def get_all_load_data(self):
+        load = {}
+        for col in self.load_data.columns:
+            load[int(col)] = []
+        for col in self.load_data.columns:
+            for i in self.load_data.index:
+                load[int(col)].append(
+                    self.load_data[col][i] / self.base_power,
+                    self.__get_reactive_power(self.load_data[col][i]) / self.base_power
                 )
-            for i in range(l, r, 1):
-                row = self.load_data.iloc[i]
-                for col in self.load_data.columns:
-                    p = row[col]
-                    q = math.sqrt((p / self.__power_factor) ** 2 - p ** 2)
-                    net.load.at[int(col), "p_mw"] = p
-                    net.load.at[int(col), "q_mvar"] = q
-                pp.runpp(net)
-                # record result
-                for index, row in net.res_bus.iterrows():
-                    for col in res_bus.keys():
-                        res_bus[col][index].append(row[col])
-                for index, row in net.res_line.iterrows():
-                    for col in res_branch.keys():
-                        res_branch[col][index].append(row[col])
-        res = {"bus": res_bus, "branch": res_branch}
-        if l == 0 and r == 8760 and regen is True:
-            with open(file_path, "w") as f:
-                json.dump(res, f)
-        with open("pf_result.json", 'w', encoding='utf-8') as f:
-            json.dump(res, f)
-        return
+        return load
+
+    def run_powerflow(self, load_time=0):
+        if load_time >= len(self.load_data.index) or load_time < 0:
+            raise ValueError('illegal load_time!')
+        net = copy.deepcopy(self.net)
+        for index, row in self.load_peak_data.iterrows():
+            pp.create_load(net, bus=int(index), index=int(index), p_mw=float(row["p_mw"]), q_mvar=float(row["q_mvar"]))
+        for col in self.load_data.columns:
+            net.load.at[int(col), "p_mw"] = float(self.load_data[col][load_time])
+            net.load.at[int(col), "q_mvar"] = float(self.__get_reactive_power(self.load_data[col][load_time]))
+        pp.runopp(net)
+        net.res_bus.to_csv(f'res_bus_{load_time}.csv')
+        net.res_line.to_csv(f'res_branch_{load_time}.csv')
 
 
 
@@ -307,9 +230,9 @@ IEEE Transactions on Power Delivery, 1989.
 """
 class IEEE33:
     def __init__(self):
-        self.__base_voltage = 12.66     # kV
-        self.__base_power = 10          # MVA
-        self.__base_impedance = self.__base_voltage ** 2 / self.__base_power
+        self.base_voltage = 12.66     # kV
+        self.base_power = 10          # MVA
+        self.base_impedance = self.base_voltage ** 2 / self.base_power
         self.slack = 0
         self.grid = self.__get_topology()
         self.load = self.__get_load_data()
@@ -333,8 +256,8 @@ class IEEE33:
                 G.add_edge(
                     int(row['from_bus']),
                     int(row['to_bus']),
-                    R=float(row['r_ohm_per_km']) / self.__base_impedance,
-                    X=float(row['x_ohm_per_km']) / self.__base_impedance
+                    R=float(row['r_ohm_per_km']) / self.base_impedance,
+                    X=float(row['x_ohm_per_km']) / self.base_impedance
                 )
         return G
 
@@ -343,8 +266,8 @@ class IEEE33:
         pd_load = pd.read_csv(os.path.join(current_dir, './data/IEEE33/load.csv'))
         for _, row in pd_load.iterrows():
             load[int(row['bus'])] = (
-                float(row['p_mw']) / self.__base_power,
-                float(row['q_mvar']) / self.__base_power
+                float(row['p_mw']) / self.base_power,
+                float(row['q_mvar']) / self.base_power
             )
         return load
 
